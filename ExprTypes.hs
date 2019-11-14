@@ -1,8 +1,7 @@
 module ExprTypes where
 
 -- These types are expressions in our lambda calculus.
-type Var =
-  String
+type Var = String
 
 data Lambda =
   Var :=> Expr
