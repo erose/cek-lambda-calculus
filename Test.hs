@@ -14,14 +14,6 @@ assertEqual expected actual = do
     putStrLn ("Actual: " ++ show actual)
     error "Assertion failed"
 
-testFreshen :: IO ()
-testFreshen = do
-  assertEqual "x'" $ Main.freshen (Lam ("x" :=> (Ref "x"))) "x"
-  assertEqual "x'" $ Main.freshen (Lam ("x" :=> Lam ("y" :=> Ref "x"))) "x"
-
-  assertEqual "x''" $ Main.freshen (Lam ("x" :=> Lam ("x'" :=> Ref "x"))) "x"
-  assertEqual "x''" $ Main.freshen (Lam ("x" :=> Lam ("x'" :=> Ref "x"))) "x'"
-
 testEvaluationToCEKState :: IO ()
 testEvaluationToCEKState = do
   let fexpr = Lam ("x" :=> Lam ("y" :=> Ref "x"))
@@ -61,7 +53,5 @@ testEvaluation = do
 
 main :: IO ()
 main = do
-  testFreshen
   testEvaluationToCEKState
-  -- testSubstitute
   -- testSerializingExpressionsToPythonFunctions

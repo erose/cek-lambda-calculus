@@ -68,11 +68,6 @@ terminal step isFinal current =
   else
     terminal step isFinal (step current)
 
--- Map an expression into a state.
-inject :: Expr -> Σ
-inject e = (e, emptyEnv, Mt)
-  where emptyEnv = Map.empty
-
 -- Advances the machine forward by one step.
 step :: Σ -> Σ
 step (Ref v, ρ, κ) -- Evaluating a reference? Look it up in the environment.
@@ -98,7 +93,7 @@ isFinal _ = False
 
 -- Evaluates an expression, resulting in a terminal state.
 evaluateToCEKState :: Expr -> Σ
-evaluateToCEKState expr = terminal step isFinal (inject expr)
+evaluateToCEKState expr = evaluateToCEKStateWithEnv expr Map.empty
 
 -- TODO
 evaluateToCEKStateWithEnv :: Expr -> Env -> Σ
@@ -115,16 +110,3 @@ evaluate expr env = let
     then control
   else
     Lam (x :=> (evaluate body env'))
-
--- Utility methods.
-
--- Given an expression tree and a name, modify the name until it is no longer bound by any lambda in
--- the expression tree.
-freshen :: Expr -> Var -> Var
-freshen expr x = go (allVars expr) x where
-  go :: [Var] -> Var -> Var
-  go usedVars x
-    | elem x usedVars = go usedVars (appendTickMark x)
-    | otherwise = x
-
-  appendTickMark x = (x ++ "'")
