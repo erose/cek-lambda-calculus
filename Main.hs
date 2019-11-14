@@ -95,18 +95,19 @@ isFinal _ = False
 evaluateToCEKState :: Expr -> Σ
 evaluateToCEKState expr = evaluateToCEKStateWithEnv expr Map.empty
 
--- TODO
+-- Evaluates an expression in the context of a certain environment, resulting in a terminal state.
 evaluateToCEKStateWithEnv :: Expr -> Env -> Σ
-evaluateToCEKStateWithEnv expr env = terminal step isFinal (expr, env, Mt)
+evaluateToCEKStateWithEnv expr env = terminal step isFinal initial
+  where initial = (expr, env, Mt)
 
 -- Evaluates an expression, resulting in another expression.
 evaluate :: Expr -> Env -> Expr
 evaluate expr env = let
-  (control@(Lam (x :=> body)), env', Mt) = evaluateToCEKStateWithEnv expr env
+  (expr'@(Lam (x :=> body)), env', Mt) = evaluateToCEKStateWithEnv expr env
 
   in
 
   if (env' == Map.empty)
-    then control
+    then expr'
   else
     Lam (x :=> (evaluate body env'))
