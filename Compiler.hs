@@ -109,7 +109,7 @@ toPythonFunction expr@(Lam lam) = printf s (toPythonFunctionReference expr) (toP
 -- in expressions but are not allowed in Python identifiers, I use 'l' to stand in for '(' and 'j'
 -- to stand in for ')'.
 
--- e.g. pythonIdentifierSafe (Lam ("x" :=> Lam ("y" :=> Ref "x"))) == "Lam_L_x_to_lam_L_y_to_Ref_xJJ"
+-- e.g. pythonIdentifierSafe (Lam ("x" :=> Lam ("y" :=> Ref "x"))) == "Lam_l_x_to_lam_l_y_to_Ref_xjj"
 pythonIdentifierSafe :: String -> String
 pythonIdentifierSafe s = Data.Text.unpack $
   Data.Text.replace " " "_" $
