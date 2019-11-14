@@ -1,6 +1,7 @@
 module Main where
 import qualified Data.Map.Strict as Map
 import ExprTypes
+import Debug.Trace -- TODO
 
 -- NOTES
 -- interpretation using closures
@@ -20,6 +21,8 @@ import ExprTypes
 --     Might's article doesn't address it.
 --       - Answer: All that data is in the environment, you have to do a substitution/normalization
 --         procedure to get it out.
+--   - How does the CEK machine ensure that, when you substitute things from the environment back
+--     into the control at the end, you don't get something that requires more computation?
 --
 -- IDEAS:
 --   - Let's create a gadget (function), for each top-level expression, which tells you what to do when
@@ -94,5 +97,34 @@ isFinal (Lam _, _, Mt) = True -- A single value. Nothing to apply, no work to do
 isFinal _ = False
 
 -- Evaluates an expression, resulting in a terminal state.
-evaluate :: Expr -> Σ
-evaluate expr = terminal step isFinal (inject expr)
+evaluateToCEKState :: Expr -> Σ
+evaluateToCEKState expr = terminal step isFinal (inject expr)
+
+-- TODO
+evaluateToCEKStateWithEnv :: Expr -> Env -> Σ
+evaluateToCEKStateWithEnv expr env = terminal step isFinal (expr, env, Mt)
+
+-- Evaluates an expression, resulting in another expression.
+evaluate :: Expr -> Env -> Expr
+evaluate expr env = let
+  (control@(Lam (x :=> body)), env', Mt) = evaluateToCEKStateWithEnv expr env
+
+  in
+
+  if (env' == Map.empty)
+    then control
+  else
+    Lam (x :=> (evaluate body env'))
+
+-- Utility methods.
+
+-- Given an expression tree and a name, modify the name until it is no longer bound by any lambda in
+-- the expression tree.
+freshen :: Expr -> Var -> Var
+freshen expr x = go (allVars expr) x where
+  go :: [Var] -> Var -> Var
+  go usedVars x
+    | elem x usedVars = go usedVars (appendTickMark x)
+    | otherwise = x
+
+  appendTickMark x = (x ++ "'")

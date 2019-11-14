@@ -22,14 +22,6 @@ compile rootExpr = unlines $
   -- produce multiple Python functions for it.
     allUniqueExpressions = Data.List.nub (allExpressions rootExpr)
 
--- Collect each expression in the AST. It would be nice to have Expr implement Traversable, but that
--- doesn't appear to be possible since Traversable is for types of kind * -> *.
-allExpressions :: Expr -> [Expr]
-allExpressions expr = case expr of
-  f :@ e -> [expr] ++ (allExpressions f) ++ (allExpressions e)
-  Lam (x :=> e) -> [expr] ++ (allExpressions e)
-  Ref _ -> [expr]
-
 -- In the header of the file, we declare some global variables.
 header :: PythonCode
 header = "\
@@ -45,8 +37,10 @@ footer rootExpr = printf s (toPythonFunctionReference rootExpr)
   where s = "\
 \if __name__ == \"__main__\":\n\
 \  try:\n\
-\    print(%s())\n\
+\    term = %s()\n\
+\    print(term, environment)\n\
 \  except Exception:\n\
+\    # For debugging.\n\
 \    print(\"environment:\", environment)\n\
 \    print(\"continuation:\", continuation)\n\
 \    raise\n"
@@ -137,5 +131,8 @@ toPythonTuple expr@(Lam (x :=> e)) =
 -- Just for testing.
 main :: IO ()
 main = do
-  putStr $ compile $ (Lam ("x" :=> (Ref "x"))) :@ Lam ("y" :=> (Ref "y"))
-  -- putStr $ compile $ (Lam ("x" :=> ((Ref "x") :@ (Ref "x")))) :@ Lam ("x" :=> (Ref "x"))
+  -- putStr $ compile $ (Lam ("x" :=> (Ref "x"))) :@ Lam ("y" :=> (Ref "y"))
+
+  let fexpr = Lam ("x" :=> Lam ("y" :=> Ref "x"))
+  let doubleexpr = Lam ("x" :=> ((Ref "x") :@ (Ref "x")))
+  putStr $ compile $ doubleexpr :@ fexpr

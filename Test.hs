@@ -14,21 +14,38 @@ assertEqual expected actual = do
     putStrLn ("Actual: " ++ show actual)
     error "Assertion failed"
 
-testEvaluation :: IO ()
-testEvaluation = do
+testFreshen :: IO ()
+testFreshen = do
+  assertEqual "x'" $ Main.freshen (Lam ("x" :=> (Ref "x"))) "x"
+  assertEqual "x'" $ Main.freshen (Lam ("x" :=> Lam ("y" :=> Ref "x"))) "x"
+
+  assertEqual "x''" $ Main.freshen (Lam ("x" :=> Lam ("x'" :=> Ref "x"))) "x"
+  assertEqual "x''" $ Main.freshen (Lam ("x" :=> Lam ("x'" :=> Ref "x"))) "x'"
+
+testEvaluationToCEKState :: IO ()
+testEvaluationToCEKState = do
   let fexpr = Lam ("x" :=> Lam ("y" :=> Ref "x"))
   let idexpr = Lam ("x" :=> (Ref "x"))
 
-  let (result, _, _) = Main.evaluate $ fexpr :@ idexpr
+  let (result, empty, Main.Mt) = Main.evaluateToCEKState $ fexpr :@ idexpr
   assertEqual (Lam ("y" :=> Ref "x")) result
 
-  let (result, _, _) = Main.evaluate $ (fexpr :@ idexpr) :@ idexpr
+  let (result, empty, Main.Mt) = Main.evaluateToCEKState $ (fexpr :@ idexpr) :@ idexpr
   assertEqual (Lam ("x" :=> Ref "x")) result
 
-  -- Let's try terminating in a value that is nowhere in our input expression.
   let doubleexpr = Lam ("x" :=> ((Ref "x") :@ (Ref "x")))
   assertEqual (Lam ("y" :=> Ref "x"), Map.fromList [("x", Main.Closure ("x" :=> Lam ("y" :=> Ref "x")) (Map.fromList []))], Main.Mt)
-              (Main.evaluate $ doubleexpr :@ fexpr)
+              (Main.evaluateToCEKState $ doubleexpr :@ fexpr)
+
+testEvaluation :: IO ()
+testEvaluation = do
+  -- Test that various SKI combinator identities hold.
+  let s = Lam ("x" :=> Lam ("y" :=> Lam ("z" :=> (((Ref "x") :@ (Ref "z")) :@ ((Ref "y") :@ (Ref "z"))))))
+  let k = Lam ("x" :=> Lam ("y" :=> (Ref "x")))
+  let i = Lam ("x" :=> (Ref "x"))
+
+  -- sksk = k
+  assertEqual k (Main.evaluate (((s:@k):@s):@k) Map.empty)
 
 -- Commented out for now as these functions have not proved to be stable.
 -- testSerializingExpressionsToPythonFunctions :: IO ()
@@ -44,5 +61,7 @@ testEvaluation = do
 
 main :: IO ()
 main = do
-  testEvaluation
+  testFreshen
+  testEvaluationToCEKState
+  -- testSubstitute
   -- testSerializingExpressionsToPythonFunctions
