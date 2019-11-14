@@ -68,7 +68,6 @@ toPythonFunction expr@(Ref v) = printf s (toPythonFunctionReference expr) v
 -- The relevant case of the step function for reference.
 -- step (f :@ e, ρ, κ) -- Evaluating a function application? First, evaluate the function.
 --   = (f, ρ, Ar e ρ κ)
--- TODO: Do we want a shallow or deep copy of the environment here? I think shallow.
 toPythonFunction expr@(f :@ e) = printf s (toPythonFunctionReference expr) (toPythonFunctionReference e) (toPythonFunctionReference f)
   where s = "\
 \def %s():\n\
@@ -88,9 +87,7 @@ toPythonFunction expr@(Lam lam) = printf s (toPythonFunctionReference expr) (toP
   where s = "\
 \def %s():\n\
 \  global environment, continuation\n\
-\  if not continuation:\n\
-\    # We have terminated.\n\
-\    return %s\n\
+\  if not continuation: return %s # We have terminated.\n\
 \  \n\
 \  (continuation_type, expression_or_lambda, env_prime) = continuation.pop()\n\
 \  if continuation_type == \"Ar\":\n\
@@ -105,8 +102,6 @@ toPythonFunction expr@(Lam lam) = printf s (toPythonFunctionReference expr) (toP
 \    environment = env_prime.copy()\n\
 \    environment[x] = closure\n\
 \    return e()\n"
-
--- TODO: In more generality, we want a way to serialize Exprs and Lambdas into Python literals.
 
 -- Ensure that a string is safe to be used as a substring of a valid Python identifier. A valid
 -- Python 3 identifier is described here:
@@ -132,6 +127,9 @@ toPythonFunctionReference expr = Data.Text.unpack $
   (++) "expr__" $
   pythonIdentifierSafe (show expr)
 
+-- We choose a weird three-element tuple representation because, in the resulting Python code, we
+-- need access to both a) the bound variable as a string, b) the body as a function, and c) the
+-- whole thing as a function.
 toPythonTuple :: Expr -> String
 toPythonTuple expr@(Lam (x :=> e)) =
   "(" ++ (show x) ++ ", " ++ (toPythonFunctionReference e) ++ ", " ++ (toPythonFunctionReference expr) ++ ")"

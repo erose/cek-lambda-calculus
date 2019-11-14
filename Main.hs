@@ -14,7 +14,12 @@ import ExprTypes
 --   - How does compiling the lambda calculus work? Wouldn't you just reduce it to a single
 --     expression during your compilation, and then you're done? Given that we're compiling at all,
 --     why NOT do this?
---     - Answer: Because this is a compiler, you are restricted to take O(input length) time.
+--       - Answer: Because this is a compiler, you are restricted to take O(input length) time.
+--   - How does the CEK machine ever return values that were not present initially? This didn't
+--     initially occur to me, perhaps due to lack of familiarity with the lambda calculus, and Matt
+--     Might's article doesn't address it.
+--       - Answer: All that data is in the environment, you have to do a substitution/normalization
+--         procedure to get it out.
 --
 -- IDEAS:
 --   - Let's create a gadget (function), for each top-level expression, which tells you what to do when
