@@ -23,6 +23,8 @@ import Debug.Trace -- TODO
 --         procedure to get it out.
 --   - How does the CEK machine ensure that, when you substitute things from the environment back
 --     into the control at the end, you don't get something that requires more computation?
+--   - How do you derive the CEK machine steps?
+--      - EXERCISE: Derive them from Christiansen's eval function.
 --
 -- IDEAS:
 --   - Let's create a gadget (function), for each top-level expression, which tells you what to do when
@@ -96,7 +98,7 @@ step state@(Ref v, ρ, κ) -- Evaluating a reference? Look it up in the environm
 
       -- TODO: Explain.
       Neu neutral ->
-        trace ("Case is Ref v (Lookup was Neutral)\n" ++ (stateToString (Ref v, ρ, κ)) ++ "\n") (handleNeutral neutral) where
+        trace ("Case is Ref v (Lookup was Neutral)\n" ++ (stateToString state) ++ "\n") (handleNeutral neutral) where
 
         handleNeutral :: Neutral -> Σ
         handleNeutral neutral =

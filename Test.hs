@@ -28,7 +28,7 @@ testEvaluation = do
   let i = Lam ("x" :=> (Ref "x"))
 
   -- skk = i
-  assertEqual i (Main.evaluate (s:@k))
+  assertEqual i (Main.evaluate ((s:@k):@k))
 
   -- print $ Main.evaluateWithEnv (i :@ (Ref "q")) (Map.fromList [("q", Main.Neu (Main.NeutralVar "q"))])
 
