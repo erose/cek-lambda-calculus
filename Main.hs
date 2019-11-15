@@ -65,7 +65,6 @@ data Kont =
   Mt -- the empty continuation
   | Ar Expr Env Kont -- the "I hold an argument to evaluate" continuation
   | Fn Lambda Env Kont -- the "I contain an evaluated function, and now I'm evaluating an argument term" continuation
-  | FnN Neutral Env Kont -- the "I contain an evaluated neutral term, and now I'm evaluating an argument term" continuation
   deriving (Show, Eq)
 
 -- Advances the state machine until it hits a final state.
@@ -89,9 +88,6 @@ step state@(Lam lam, ρ, Ar e ρ' κ) -- Evaluated the function? Good, now go ev
 step state@(Lam lam, ρ, Fn (x :=> e) ρ' κ)
   = trace ("Case is Lam lam on Fn\n" ++ (stateToString state) ++ "\n") (e, ρ'', κ) where
     ρ'' = Map.insert x (Closure lam ρ) ρ'
-step state@(Lam lam, ρ, FnN neutral ρ' κ)
-  = trace ("Case is Lam lam on N\n" ++ (stateToString state) ++ "\n") (e, ρ'', κ) where
-    ρ'' = Map.insert x (Closure lam ρ) ρ'
 
 step state@(Ref v, ρ, κ) -- Evaluating a reference? Look it up in the environment.
   = case (ρ !* v) of
@@ -109,8 +105,6 @@ step state@(Ref v, ρ, κ) -- Evaluating a reference? Look it up in the environm
             -- _ ::@ value -> (Ref v, ρ, κ) -- TODO
 
         continue :: Kont -> Σ
-         -- Evaluated the function? Good, now go evaluate the argument term.
-        continue (Ar e ρ' κ') = (e, ρ', FnN neutral ρ κ')
         -- Perform the application, now with the argument bound to its value in the environment.
         continue (Fn (x :=> e) ρ' κ') = (e, ρ'', κ') where
           ρ'' = Map.insert x (Neu (NeutralVar v)) ρ'
