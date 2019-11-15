@@ -52,7 +52,8 @@ testEvaluation = do
   let i = Lam ("x" :=> (Ref "x"))
 
   -- skk = i
-  assertEqual (Lam ("z" :=> (Ref "z"))) (Main.evaluate ((s:@k):@k))
+  -- TODO: Implement alpha-equality so we can actually check that it equals i, instead of knowing about z.
+  assertEqual (Lam ("z" :=> (Ref "z"))) $ Main.evaluate ((s:@k):@k)
 
   -- sksk = k
   assertEqual k (Main.evaluate (((s:@k):@s):@k))
