@@ -22,15 +22,37 @@ testEvaluationToCEKState = do
 
 testEvaluation :: IO ()
 testEvaluation = do
+  -- Test basic evaluation with neutral variables.
+  let qx_x = ((Ref "q") :@ (Lam ("x" :=> (Ref "x"))))
+  let envWhereQIsNeutral = Map.fromList [("q", Main.Neu (Main.NeutralVar "q"))]
+
+  -- q(x.x) = q(x.x)
+  assertEqual qx_x $ Main.evaluateWithEnv qx_x envWhereQIsNeutral
+
+  let x_x = Lam ("x" :=> (Ref "x"))
+  let qk = (Ref "q") :@ (Ref "k")
+  let envWhereQAndKAreNeutral = Map.fromList [("q", Main.Neu (Main.NeutralVar "q")), ("k", Main.Neu (Main.NeutralVar "k"))]
+  let qkx_x = qk :@ x_x
+
+  -- qk(x.x) = qk(x.x)
+  assertEqual qkx_x $ Main.evaluateWithEnv qkx_x envWhereQAndKAreNeutral
+
+  -- (x.x)(qk) = qk
+  assertEqual qk $ Main.evaluateWithEnv (x_x :@ qk) envWhereQAndKAreNeutral
+
+  let qkr = qk :@ (Ref "r")
+  let envWhereQAndKAndRAreNeutral = Map.fromList [("q", Main.Neu (Main.NeutralVar "q")), ("k", Main.Neu (Main.NeutralVar "k")), ("r", Main.Neu (Main.NeutralVar "r"))]
+
+  -- qkr = qkr
+  assertEqual qkr $ Main.evaluateWithEnv qkr envWhereQAndKAndRAreNeutral
+
   -- Test that various SKI combinator identities hold.
   let s = Lam ("x" :=> Lam ("y" :=> Lam ("z" :=> (((Ref "x") :@ (Ref "z")) :@ ((Ref "y") :@ (Ref "z"))))))
   let k = Lam ("x" :=> Lam ("y" :=> (Ref "x")))
   let i = Lam ("x" :=> (Ref "x"))
 
   -- skk = i
-  assertEqual i (Main.evaluate ((s:@k):@k))
-
-  -- print $ Main.evaluateWithEnv (i :@ (Ref "q")) (Map.fromList [("q", Main.Neu (Main.NeutralVar "q"))])
+  assertEqual (Lam ("z" :=> (Ref "z"))) (Main.evaluate ((s:@k):@k))
 
   -- sksk = k
   assertEqual k (Main.evaluate (((s:@k):@s):@k))

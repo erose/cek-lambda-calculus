@@ -65,8 +65,18 @@ type Env = Map.Map Var D
 -- The type of continuations.
 data Kont =
   Mt -- the empty continuation
-  | Ar Expr Env Kont -- the "I hold an argument to evaluate" continuation
-  | Fn Lambda Env Kont -- the "I contain an evaluated function, and now I'm evaluating an argument term" continuation
+  | Ar Expr Env Kont -- "Evaluate this argument when I am done evaluating the function."
+  | Fn Lambda Env Kont -- "Apply this function to the argument I am currently evaluating, when I finish evaluating it."
+
+  -- TODO: Should the new ones have Env as well?
+
+  -- "Apply this neutral value to the argument I am currently evaluating, when I finish evaluating
+  -- it. It will be the value of Expr."
+  | NFn Neutral Expr Kont
+
+  -- "Evaluate this subtree as equal to this neutral value, then terminate unless there is more work
+  -- to do."
+  | N Neutral Expr Kont
   deriving (Show, Eq)
 
 -- Advances the state machine until it hits a final state.
@@ -79,37 +89,72 @@ terminal step isFinal current =
 
 -- Advances the machine forward by one step.
 step :: Σ -> Σ
+step state@(f :@ e, ρ, (N neutralValue parent κ')) -- This expression is neutral.
+  = --trace ("Case is f :@ e with continuation N\n" ++ (stateToString state) ++ "\n")
+  nextState where
+    nextState = case κ' of
+      -- This expression is being applied to some other expression. Evaluate the argument, preparing
+      -- to apply the value to it.
+      Ar e' ρ' κ'' ->
+        (e', ρ', NFn neutralValue (parent :@ e') κ'')
+
+      -- This expression is the argument of a function. Perform the application, now with the
+      -- argument bound to its value in the environment.
+      Fn (x :=> e') ρ' κ'' ->
+        (e', ρ'', κ'') where
+          ρ'' = Map.insert x (Neu neutralValue) ρ'
+
 step state@(f :@ e, ρ, κ) -- Evaluating a function application? First, evaluate the function.
-  = trace ("Case is f :@ e\n" ++ (stateToString state) ++ "\n") (f, ρ, Ar e ρ κ)
+  = --trace ("Case is f :@ e\n" ++ (stateToString state) ++ "\n")
+  (f, ρ, Ar e ρ κ)
 
 step state@(Lam lam, ρ, Ar e ρ' κ) -- Evaluated the function? Good, now go evaluate the argument term.
-  = trace ("Case is Lam lam on Ar\n" ++ (stateToString state) ++ "\n") (e, ρ', Fn lam ρ κ)
+  = --trace ("Case is Lam lam on Ar\n" ++ (stateToString state) ++ "\n")
+  (e, ρ', Fn lam ρ κ)
 
 -- Evaluated the argument too? Perform the application, now with the argument bound to its value in
 -- the environment.
 step state@(Lam lam, ρ, Fn (x :=> e) ρ' κ)
-  = trace ("Case is Lam lam on Fn\n" ++ (stateToString state) ++ "\n") (e, ρ'', κ) where
+  = --trace ("Case is Lam lam on Fn\n" ++ (stateToString state) ++ "\n")
+  (e, ρ'', κ) where
     ρ'' = Map.insert x (Closure lam ρ) ρ'
+
+-- TODO: Describe what goes on.
+step state@(Lam lam, ρ, NFn neutralValue parent κ)
+  = --trace ("Case is Lam lam on NFn\n" ++ (stateToString state) ++ "\n")
+  (parent, ρ, N (neutralValue ::@ (Closure lam ρ)) parent κ)
 
 step state@(Ref v, ρ, κ) -- Evaluating a reference? Look it up in the environment.
   = case (ρ !* v) of
       Closure lam ρ' ->
-        trace ("Case is Ref v (Lookup was Closure)\n" ++ (stateToString state) ++ "\n") (Lam lam, ρ', κ)
+        --trace ("Case is Ref v (Lookup was Closure)\n" ++ (stateToString state) ++ "\n")
+        (Lam lam, ρ', κ)
 
-      -- TODO: Explain.
-      Neu neutral ->
-        trace ("Case is Ref v (Lookup was Neutral)\n" ++ (stateToString state) ++ "\n") (handleNeutral neutral) where
-
-        handleNeutral :: Neutral -> Σ
-        handleNeutral neutral =
-          case neutral of
-            NeutralVar _ -> continue κ
-            -- _ ::@ value -> (Ref v, ρ, κ) -- TODO
+      Neu neutralValue ->
+        continue κ where
 
         continue :: Kont -> Σ
-        -- Perform the application, now with the argument bound to its value in the environment.
-        continue (Fn (x :=> e) ρ' κ') = (e, ρ'', κ') where
-          ρ'' = Map.insert x (Neu (NeutralVar v)) ρ'
+        -- Discovered that the left side of an application was a neutral value. Evaluate the right
+        -- side, preparing to apply the value to it.
+        continue (Ar e ρ' κ') = --trace ("Case is Ref v (Lookup was Neutral, Kont was Ar)\n" ++ (stateToString state) ++ "\n")
+          (e, ρ', NFn neutralValue ((Ref v) :@ e) κ')
+
+        -- Discovered that the right side of a function application was a neutral value. Perform the
+        -- application, now with the argument bound to its value in the environment.
+        continue (Fn (x :=> e) ρ' κ') = --trace ("Case is Ref v (Lookup was Neutral, Kont was Fn)\n" ++ (stateToString state) ++ "\n")
+          (e, ρ'', κ') where
+            ρ'' = Map.insert x (Neu neutralValue) ρ'
+
+        -- Discovered that the right side of a neutral application was a neutral value. Glue the
+        -- terms together, reporting to the parent its value.
+        continue (NFn n parent κ') = --trace ("Case is Ref v (Lookup was Neutral, Kont was NFn)\n" ++ (stateToString state) ++ "\n")
+          (parent, ρ, N (n ::@ (Neu neutralValue)) parent κ')
+
+        -- Discovered that this lookup was a neutral value, and we have no more work to do. Put on
+        -- the continuation that asserts this is a normal value. (The state will be terminal.)
+        continue Mt = --trace ("Case is Ref v (Lookup was Neutral, Kont was Mt)\n" ++ (stateToString state) ++ "\n")
+          (nexpr, ρ, N neutralValue nexpr Mt) where
+            nexpr = neutralToExpr neutralValue
 
 -- TODO
 stateToString :: Σ -> String
@@ -118,10 +163,7 @@ stateToString (e, ρ, κ) = "State:\n" ++ (show e) ++ "\n" ++ (show ρ) ++ "\n" 
 -- Decides whether a state is a final state.
 isFinal :: Σ -> Bool
 isFinal (Lam _, _, Mt) = True -- An unapplied lambda. No work left to do.
-isFinal (Ref v, ρ, Mt) =  -- A reference is final if it refers to a neutral value.
-  case (ρ !* v) of
-    Neu _ -> True
-    _ -> False
+isFinal (e, _, (N value _ Mt)) = True -- The current subtree is neutral, with no work left to do, so we have no work left to do.
 isFinal _ = False
 
 -- Evaluates an expression, resulting in a terminal state.
@@ -150,9 +192,10 @@ evaluateWithEnv expr env =
           env'' = Map.insert x (Neu (NeutralVar x)) env'
           -- Evaluate under the lambda by binding its argument to a neutral variable first.
 
-    -- ??? TODO
-    (expr'@(Ref v), env', Mt) ->
-      trace ("Finished on Ref v, with " ++ (show env') ++ ",  v: " ++ (show v)) expr'
+    -- The value must be neutral since we terminated.
+    (expr', env', _) ->
+      --trace ("Finished on neutral expr, with expr: " ++ (show expr'))
+      expr'
 
 -- Utility functions.
 
@@ -161,3 +204,9 @@ evaluateWithEnv expr env =
 map !* key = case (Map.lookup key map) of
   Just value -> value
   Nothing -> error $ "Could not find key " ++ (show key) ++ " in " ++ (show map)
+
+-- Convert a neutral value to an expression of Refs and applications. The analogy between NeutralVar
+-- and Ref, and between ::@ and :@.
+neutralToExpr :: Neutral -> Expr
+neutralToExpr (NeutralVar v) = Ref v
+neutralToExpr (a ::@ (Neu b)) = (neutralToExpr a) :@ (neutralToExpr b)
