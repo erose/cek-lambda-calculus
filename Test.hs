@@ -5,15 +5,6 @@ import ExprTypes
 import qualified Main
 import qualified Compiler
 
-assertEqual :: (Eq a, Show a) => a -> a -> IO ()
-assertEqual expected actual = do
-  if (expected == actual) then do
-    return ()
-  else do
-    putStrLn ("Expected: " ++ show expected)
-    putStrLn ("Actual: " ++ show actual)
-    error "Assertion failed"
-
 testEvaluationToCEKState :: IO ()
 testEvaluationToCEKState = do
   let fexpr = Lam ("x" :=> Lam ("y" :=> Ref "x"))
@@ -36,8 +27,13 @@ testEvaluation = do
   let k = Lam ("x" :=> Lam ("y" :=> (Ref "x")))
   let i = Lam ("x" :=> (Ref "x"))
 
+  -- skk = i
+  assertEqual i (Main.evaluate (s:@k))
+
+  -- print $ Main.evaluateWithEnv (i :@ (Ref "q")) (Map.fromList [("q", Main.Neu (Main.NeutralVar "q"))])
+
   -- sksk = k
-  assertEqual k (Main.evaluate (((s:@k):@s):@k) Map.empty)
+  assertEqual k (Main.evaluate (((s:@k):@s):@k))
 
 -- Commented out for now as these functions have not proved to be stable.
 -- testSerializingExpressionsToPythonFunctions :: IO ()
@@ -51,7 +47,18 @@ testEvaluation = do
 --   assertEqual "def expr__Ref_x_apply_Ref_y():\n  continuation.append((\"Ar\", expr__Ref_y, environment.copy()))\n  return expr__Ref_x()\n"
 --               (Compiler.toPythonFunction applicationExpr)
 
+-- Utilities.
+assertEqual :: (Eq a, Show a) => a -> a -> IO ()
+assertEqual expected actual = do
+  if (expected == actual) then do
+    return ()
+  else do
+    putStrLn ("Expected: " ++ show expected)
+    putStrLn ("Actual: " ++ show actual)
+    error "Assertion failed"
+
 main :: IO ()
 main = do
+  testEvaluation
   testEvaluationToCEKState
   -- testSerializingExpressionsToPythonFunctions

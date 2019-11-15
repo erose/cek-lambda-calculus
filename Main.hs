@@ -48,6 +48,13 @@ type Σ = (Expr, Env, Kont)
 -- The type of values that expressions in our lambda calculus can take.
 data D =
   Closure Lambda Env
+  | Neu Neutral
+  deriving (Show, Eq)
+
+-- TODO: Explain.
+data Neutral =
+  NeutralVar Var
+  | Neutral ::@ D
   deriving (Show, Eq)
 
 -- Environments bind names to values.
@@ -58,6 +65,7 @@ data Kont =
   Mt -- the empty continuation
   | Ar Expr Env Kont -- the "I hold an argument to evaluate" continuation
   | Fn Lambda Env Kont -- the "I contain an evaluated function, and now I'm evaluating an argument term" continuation
+  | FnN Neutral Env Kont -- the "I contain an evaluated neutral term, and now I'm evaluating an argument term" continuation
   deriving (Show, Eq)
 
 -- Advances the state machine until it hits a final state.
@@ -70,25 +78,54 @@ terminal step isFinal current =
 
 -- Advances the machine forward by one step.
 step :: Σ -> Σ
-step (Ref v, ρ, κ) -- Evaluating a reference? Look it up in the environment.
-  = (Lam lam, ρ', κ) where
-    Closure lam ρ' = ρ Map.! v -- Assume the key is in the map.
+step state@(f :@ e, ρ, κ) -- Evaluating a function application? First, evaluate the function.
+  = trace ("Case is f :@ e\n" ++ (stateToString state) ++ "\n") (f, ρ, Ar e ρ κ)
 
-step (f :@ e, ρ, κ) -- Evaluating a function application? First, evaluate the function.
-  = (f, ρ, Ar e ρ κ)
-
-step (Lam lam, ρ, Ar e ρ' κ) -- Evaluated the function? Good, now go evaluate the argument term.
-  = (e, ρ', Fn lam ρ κ)
+step state@(Lam lam, ρ, Ar e ρ' κ) -- Evaluated the function? Good, now go evaluate the argument term.
+  = trace ("Case is Lam lam on Ar\n" ++ (stateToString state) ++ "\n") (e, ρ', Fn lam ρ κ)
 
 -- Evaluated the argument too? Perform the application, now with the argument bound to its value in
 -- the environment.
-step (Lam lam, ρ, Fn (x :=> e) ρ' κ)
-  = (e, ρ'', κ) where
+step state@(Lam lam, ρ, Fn (x :=> e) ρ' κ)
+  = trace ("Case is Lam lam on Fn\n" ++ (stateToString state) ++ "\n") (e, ρ'', κ) where
     ρ'' = Map.insert x (Closure lam ρ) ρ'
+step state@(Lam lam, ρ, FnN neutral ρ' κ)
+  = trace ("Case is Lam lam on N\n" ++ (stateToString state) ++ "\n") (e, ρ'', κ) where
+    ρ'' = Map.insert x (Closure lam ρ) ρ'
+
+step state@(Ref v, ρ, κ) -- Evaluating a reference? Look it up in the environment.
+  = case (ρ !* v) of
+      Closure lam ρ' ->
+        trace ("Case is Ref v (Lookup was Closure)\n" ++ (stateToString state) ++ "\n") (Lam lam, ρ', κ)
+
+      -- TODO: Explain.
+      Neu neutral ->
+        trace ("Case is Ref v (Lookup was Neutral)\n" ++ (stateToString (Ref v, ρ, κ)) ++ "\n") (handleNeutral neutral) where
+
+        handleNeutral :: Neutral -> Σ
+        handleNeutral neutral =
+          case neutral of
+            NeutralVar _ -> continue κ
+            -- _ ::@ value -> (Ref v, ρ, κ) -- TODO
+
+        continue :: Kont -> Σ
+         -- Evaluated the function? Good, now go evaluate the argument term.
+        continue (Ar e ρ' κ') = (e, ρ', FnN neutral ρ κ')
+        -- Perform the application, now with the argument bound to its value in the environment.
+        continue (Fn (x :=> e) ρ' κ') = (e, ρ'', κ') where
+          ρ'' = Map.insert x (Neu (NeutralVar v)) ρ'
+
+-- TODO
+stateToString :: Σ -> String
+stateToString (e, ρ, κ) = "State:\n" ++ (show e) ++ "\n" ++ (show ρ) ++ "\n" ++ (show κ) ++ "\n"
 
 -- Decides whether a state is a final state.
 isFinal :: Σ -> Bool
-isFinal (Lam _, _, Mt) = True -- A single value. Nothing to apply, no work to do.
+isFinal (Lam _, _, Mt) = True -- An unapplied lambda. No work left to do.
+isFinal (Ref v, ρ, Mt) =  -- A reference is final if it refers to a neutral value.
+  case (ρ !* v) of
+    Neu _ -> True
+    _ -> False
 isFinal _ = False
 
 -- Evaluates an expression, resulting in a terminal state.
@@ -101,13 +138,30 @@ evaluateToCEKStateWithEnv expr env = terminal step isFinal initial
   where initial = (expr, env, Mt)
 
 -- Evaluates an expression, resulting in another expression.
-evaluate :: Expr -> Env -> Expr
-evaluate expr env = let
-  (expr'@(Lam (x :=> body)), env', Mt) = evaluateToCEKStateWithEnv expr env
+evaluate :: Expr -> Expr
+evaluate expr = evaluateWithEnv expr Map.empty -- We start with the empty environment.
 
-  in
+-- Evaluates an expression in a given environment, resulting in another expression.
+evaluateWithEnv :: Expr -> Env -> Expr
+evaluateWithEnv expr env =
+  case (evaluateToCEKStateWithEnv expr env) of
+    -- We're looking at a lambda and no continuation -- there is no further action to take.
+    (expr'@(Lam lam@(x :=> body)), env', Mt) ->
+      if (env' == Map.empty)
+        then Lam lam
+      else
+        Lam (x :=> (evaluateWithEnv body env'')) where
+          env'' = Map.insert x (Neu (NeutralVar x)) env'
+          -- Evaluate under the lambda by binding its argument to a neutral variable first.
 
-  if (env' == Map.empty)
-    then expr'
-  else
-    Lam (x :=> (evaluate body env'))
+    -- ??? TODO
+    (expr'@(Ref v), env', Mt) ->
+      trace ("Finished on Ref v, with " ++ (show env') ++ ",  v: " ++ (show v)) expr'
+
+-- Utility functions.
+
+-- Lookup with a nicer-than-default error message.
+(!*) :: (Show k, Ord k, Show a) => Map.Map k a -> k -> a
+map !* key = case (Map.lookup key map) of
+  Just value -> value
+  Nothing -> error $ "Could not find key " ++ (show key) ++ " in " ++ (show map)
