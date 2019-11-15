@@ -30,33 +30,42 @@ testEvaluation = do
   assertEqual qx_x $ Main.evaluateWithEnv qx_x envWhereQIsNeutral
 
   let x_x = Lam ("x" :=> (Ref "x"))
-  let qk = (Ref "q") :@ (Ref "k")
-  let envWhereQAndKAreNeutral = Map.fromList [("q", Main.Neu (Main.NeutralVar "q")), ("k", Main.Neu (Main.NeutralVar "k"))]
-  let qkx_x = qk :@ x_x
+  let qr = (Ref "q") :@ (Ref "r")
+  let envWhereQAndRAreNeutral = Map.fromList [("q", Main.Neu (Main.NeutralVar "q")), ("r", Main.Neu (Main.NeutralVar "r"))]
+  let qrx_x = qr :@ x_x
 
-  -- qk(x.x) = qk(x.x)
-  assertEqual qkx_x $ Main.evaluateWithEnv qkx_x envWhereQAndKAreNeutral
+  -- qr(x.x) = qr(x.x)
+  assertEqual qrx_x $ Main.evaluateWithEnv qrx_x envWhereQAndRAreNeutral
 
-  -- (x.x)(qk) = qk
-  assertEqual qk $ Main.evaluateWithEnv (x_x :@ qk) envWhereQAndKAreNeutral
+  -- (x.x)(qr) = qr
+  assertEqual qr $ Main.evaluateWithEnv (x_x :@ qr) envWhereQAndRAreNeutral
 
-  let qkr = qk :@ (Ref "r")
-  let envWhereQAndKAndRAreNeutral = Map.fromList [("q", Main.Neu (Main.NeutralVar "q")), ("k", Main.Neu (Main.NeutralVar "k")), ("r", Main.Neu (Main.NeutralVar "r"))]
+  let qrt = qr :@ (Ref "t")
+  let envWhereQAndRAndTAreNeutral = Map.fromList [("q", Main.Neu (Main.NeutralVar "q")), ("r", Main.Neu (Main.NeutralVar "r")), ("t", Main.Neu (Main.NeutralVar "t"))]
 
-  -- qkr = qkr
-  assertEqual qkr $ Main.evaluateWithEnv qkr envWhereQAndKAndRAreNeutral
+  -- qrt = qrt
+  assertEqual qrt $ Main.evaluateWithEnv qrt envWhereQAndRAndTAreNeutral
 
-  -- Test that various SKI combinator identities hold.
+  -- Tests involving the SKI combinators.
   let s = Lam ("x" :=> Lam ("y" :=> Lam ("z" :=> (((Ref "x") :@ (Ref "z")) :@ ((Ref "y") :@ (Ref "z"))))))
   let k = Lam ("x" :=> Lam ("y" :=> (Ref "x")))
   let i = Lam ("x" :=> (Ref "x"))
 
+  -- sqrt = (qt)(rt)
+  -- TODO: Implement alpha-equality for this.
+  assertEqual (((Ref "x"):@(Ref "z")):@((Ref "y"):@(Ref "z"))) $ Main.evaluateWithEnv (((s:@(Ref "q")):@(Ref "r")):@(Ref "t")) envWhereQAndRAndTAreNeutral
+
   -- skk = i
-  -- TODO: Implement alpha-equality so we can actually check that it equals i, instead of knowing about z.
+  -- TODO: Implement alpha-equality for this.
   assertEqual (Lam ("z" :=> (Ref "z"))) $ Main.evaluate ((s:@k):@k)
 
   -- sksk = k
   assertEqual k (Main.evaluate (((s:@k):@s):@k))
+
+  -- s(k(si))k is a combinator that reverses the following two terms
+  -- s(k(si))kqr = rq
+  -- let reversal = (s:@(k:@(s:@i))):@k
+  -- assertEqual ((Ref "r") :@ (Ref "q")) $ Main.evaluateWithEnv ((reversal:@(Ref "q")):@(Ref "r")) envWhereQAndRAreNeutral
 
 -- Commented out for now as these functions have not proved to be stable.
 -- testSerializingExpressionsToPythonFunctions :: IO ()
