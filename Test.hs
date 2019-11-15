@@ -5,15 +5,6 @@ import ExprTypes
 import qualified Main
 import qualified Compiler
 
-assertEqual :: (Eq a, Show a) => a -> a -> IO ()
-assertEqual expected actual = do
-  if (expected == actual) then do
-    return ()
-  else do
-    putStrLn ("Expected: " ++ show expected)
-    putStrLn ("Actual: " ++ show actual)
-    error "Assertion failed"
-
 testEvaluationToCEKState :: IO ()
 testEvaluationToCEKState = do
   let fexpr = Lam ("x" :=> Lam ("y" :=> Ref "x"))
@@ -31,13 +22,40 @@ testEvaluationToCEKState = do
 
 testEvaluation :: IO ()
 testEvaluation = do
+  -- Test basic evaluation with neutral variables.
+  let qx_x = ((Ref "q") :@ (Lam ("x" :=> (Ref "x"))))
+  let envWhereQIsNeutral = Map.fromList [("q", Main.Neu (Main.NeutralVar "q"))]
+
+  -- q(x.x) = q(x.x)
+  assertEqual qx_x $ Main.evaluateWithEnv qx_x envWhereQIsNeutral
+
+  let x_x = Lam ("x" :=> (Ref "x"))
+  let qk = (Ref "q") :@ (Ref "k")
+  let envWhereQAndKAreNeutral = Map.fromList [("q", Main.Neu (Main.NeutralVar "q")), ("k", Main.Neu (Main.NeutralVar "k"))]
+  let qkx_x = qk :@ x_x
+
+  -- qk(x.x) = qk(x.x)
+  assertEqual qkx_x $ Main.evaluateWithEnv qkx_x envWhereQAndKAreNeutral
+
+  -- (x.x)(qk) = qk
+  assertEqual qk $ Main.evaluateWithEnv (x_x :@ qk) envWhereQAndKAreNeutral
+
+  let qkr = qk :@ (Ref "r")
+  let envWhereQAndKAndRAreNeutral = Map.fromList [("q", Main.Neu (Main.NeutralVar "q")), ("k", Main.Neu (Main.NeutralVar "k")), ("r", Main.Neu (Main.NeutralVar "r"))]
+
+  -- qkr = qkr
+  assertEqual qkr $ Main.evaluateWithEnv qkr envWhereQAndKAndRAreNeutral
+
   -- Test that various SKI combinator identities hold.
   let s = Lam ("x" :=> Lam ("y" :=> Lam ("z" :=> (((Ref "x") :@ (Ref "z")) :@ ((Ref "y") :@ (Ref "z"))))))
   let k = Lam ("x" :=> Lam ("y" :=> (Ref "x")))
   let i = Lam ("x" :=> (Ref "x"))
 
+  -- skk = i
+  assertEqual (Lam ("z" :=> (Ref "z"))) (Main.evaluate ((s:@k):@k))
+
   -- sksk = k
-  assertEqual k (Main.evaluate (((s:@k):@s):@k) Map.empty)
+  assertEqual k (Main.evaluate (((s:@k):@s):@k))
 
 -- Commented out for now as these functions have not proved to be stable.
 -- testSerializingExpressionsToPythonFunctions :: IO ()
@@ -51,7 +69,18 @@ testEvaluation = do
 --   assertEqual "def expr__Ref_x_apply_Ref_y():\n  continuation.append((\"Ar\", expr__Ref_y, environment.copy()))\n  return expr__Ref_x()\n"
 --               (Compiler.toPythonFunction applicationExpr)
 
+-- Utilities.
+assertEqual :: (Eq a, Show a) => a -> a -> IO ()
+assertEqual expected actual = do
+  if (expected == actual) then do
+    return ()
+  else do
+    putStrLn ("Expected: " ++ show expected)
+    putStrLn ("Actual: " ++ show actual)
+    error "Assertion failed"
+
 main :: IO ()
 main = do
+  testEvaluation
   testEvaluationToCEKState
   -- testSerializingExpressionsToPythonFunctions
