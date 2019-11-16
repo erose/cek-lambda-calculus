@@ -21,14 +21,16 @@ testEvaluation = do
 testReduction :: IO ()
 testReduction = do
   -- Test basic evaluation with neutral variables.
-  let qx_x = ((Ref "q") :@ (Lam ("x" :=> (Ref "x"))))
+  let q = Ref "q"
+  let qx_x = (q :@ (Lam ("x" :=> (Ref "x"))))
   let envWhereQIsNeutral = Map.fromList [("q", Main.Neu (Main.NeutralVar "q"))]
 
   -- q(x.x) = q(x.x)
   assertEqual qx_x $ Main.reduceWithEnv qx_x envWhereQIsNeutral
 
+  let r = Ref "r"
   let x_x = Lam ("x" :=> (Ref "x"))
-  let qr = (Ref "q") :@ (Ref "r")
+  let qr = q :@ r
   let envWhereQAndRAreNeutral = Map.fromList [("q", Main.Neu (Main.NeutralVar "q")), ("r", Main.Neu (Main.NeutralVar "r"))]
   let qrx_x = qr :@ x_x
 
@@ -38,11 +40,17 @@ testReduction = do
   -- (x.x)(qr) = qr
   assertEqual qr $ Main.reduceWithEnv (x_x :@ qr) envWhereQAndRAreNeutral
 
-  let qrt = qr :@ (Ref "t")
+  let t = Ref "t"
+  let qrt = qr :@ t
   let envWhereQAndRAndTAreNeutral = Map.fromList [("q", Main.Neu (Main.NeutralVar "q")), ("r", Main.Neu (Main.NeutralVar "r")), ("t", Main.Neu (Main.NeutralVar "t"))]
 
   -- qrt = qrt
   assertEqual qrt $ Main.reduceWithEnv qrt envWhereQAndRAndTAreNeutral
+
+  let doubleexpr = Lam ("x" :=> ((Ref "x") :@ (Ref "x")))
+  -- Show that we are able to produce expressions ocurring nowhere in the input.
+  -- (x.xx)(q) = qq.
+  assertEqual (q :@ q) $ Main.reduceWithEnv (doubleexpr :@ q) envWhereQIsNeutral
 
   -- Tests involving the SKI combinators.
   let s = Lam ("x" :=> Lam ("y" :=> Lam ("z" :=> (((Ref "x") :@ (Ref "z")) :@ ((Ref "y") :@ (Ref "z"))))))
@@ -50,7 +58,7 @@ testReduction = do
   let i = Lam ("x" :=> (Ref "x"))
 
   -- sqrt = (qt)(rt)
-  assertEqual (((Ref "q"):@(Ref "t")):@((Ref "r"):@(Ref "t"))) $ Main.reduceWithEnv (((s:@(Ref "q")):@(Ref "r")):@(Ref "t")) envWhereQAndRAndTAreNeutral
+  assertEqual ((q:@t):@(r:@t)) $ Main.reduceWithEnv (((s:@q):@r):@t) envWhereQAndRAndTAreNeutral
 
   -- skk = i
   -- TODO: Implement alpha-equality for this.
@@ -62,7 +70,7 @@ testReduction = do
   -- s(k(si))k is a combinator that reverses the following two terms
   -- s(k(si))kqr = rq
   let reversal = (s:@(k:@(s:@i))):@k
-  assertEqual ((Ref "r") :@ (Ref "q")) $ Main.reduceWithEnv ((reversal:@(Ref "q")):@(Ref "r")) envWhereQAndRAreNeutral
+  assertEqual (r:@q) $ Main.reduceWithEnv ((reversal:@q):@r) envWhereQAndRAreNeutral
 
 -- Commented out for now as these functions have not proved to be stable.
 -- testSerializingExpressionsToPythonFunctions :: IO ()
