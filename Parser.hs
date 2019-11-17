@@ -29,13 +29,6 @@ identifier = do
 parens :: Parser a -> Parser a
 parens = Tok.parens lexer
 
--- contents :: Parser a -> Parser a
--- contents p = do
---   Tok.whiteSpace lexer
---   r <- p
---   eof
---   return r
-
 -- natural :: Parser Integer
 -- natural = Tok.natural lexer
 
