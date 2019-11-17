@@ -3,7 +3,8 @@ module Compiler where
 
 -- TODO: printf may cause exceptions to be thrown at runtime. Can I do this safer?
 import Text.Printf
-import qualified Data.Text
+import Data.Text (Text, replace, pack, unpack)
+import qualified Data.Text.IO
 import qualified Data.List
 
 import ExprTypes
@@ -11,39 +12,17 @@ import ExprTypes
 -- We're not going to try to be more structured than this.
 type PythonCode = String
 
-compile :: Expr -> String
-compile rootExpr = unlines $
-  [header] ++
-  (map toPythonFunction allUniqueExpressions) ++
-  [footer rootExpr]
+compileWithTemplate :: Expr -> Text -> Text
+compileWithTemplate rootExpr template = replace "{{rootExprReference}}" rootExprText $
+  replace "{{exprs}}" exprsText template
 
   where
+    rootExprText = pack $ toPythonFunctionReference rootExpr
+    exprsText = pack $ unlines $ map toPythonFunction allUniqueExpressions
+
   -- The same expression may occur multiple times in the expression tree; if so, there's no need to
   -- produce multiple Python functions for it.
     allUniqueExpressions = Data.List.nub (allExpressions rootExpr)
-
--- In the header of the file, we declare some global variables.
-header :: PythonCode
-header = "\
-\ # Lambda = (String, Function, Function)\n\
-\ # D = (Lambda, Env)\n\
-\environment = {} # Of type Env = Dict (String -> D)\n\
-\continuation = [] # Of type [String, Function | Lambda, Env]\n"
-
--- In the footer of the generated file, we have our entry point (calling the function representing
--- the root expression).
-footer :: Expr -> PythonCode
-footer rootExpr = printf s (toPythonFunctionReference rootExpr)
-  where s = "\
-\if __name__ == \"__main__\":\n\
-\  try:\n\
-\    term = %s()\n\
-\    print(term, environment)\n\
-\  except Exception:\n\
-\    # For debugging.\n\
-\    print(\"environment:\", environment)\n\
-\    print(\"continuation:\", continuation)\n\
-\    raise\n"
 
 -- The relevant case of the step function for reference.
 -- step (Ref v, ρ, κ) -- Evaluating a reference? Look it up in the environment.
@@ -105,19 +84,19 @@ toPythonFunction expr@(Lam lam) = printf s (toPythonFunctionReference expr) (toP
 
 -- e.g. pythonIdentifierSafe (Lam ("x" :=> Lam ("y" :=> Ref "x"))) == "Lam_l_x_to_lam_l_y_to_Ref_xjj"
 pythonIdentifierSafe :: String -> String
-pythonIdentifierSafe s = Data.Text.unpack $
-  Data.Text.replace " " "_" $
-  Data.Text.replace ":=>" "to" $
-  Data.Text.replace ":@" "apply" $
-  Data.Text.replace "(" "l" $
-  Data.Text.replace ")" "j" $
-  Data.Text.pack s
+pythonIdentifierSafe s = unpack $
+  replace " " "_" $
+  replace ":=>" "to" $
+  replace ":@" "apply" $
+  replace "(" "l" $
+  replace ")" "j" $
+  pack s
 
 toPythonFunctionReference :: Expr -> String
-toPythonFunctionReference expr = Data.Text.unpack $
+toPythonFunctionReference expr = unpack $
   -- Remove the quotes that Show inserts.
-  Data.Text.replace "\"" "" $
-  Data.Text.pack $
+  replace "\"" "" $
+  pack $
   (++) "expr__" $
   pythonIdentifierSafe (show expr)
 
@@ -135,4 +114,6 @@ main = do
 
   let fexpr = Lam ("x" :=> Lam ("y" :=> Ref "x"))
   let doubleexpr = Lam ("x" :=> ((Ref "x") :@ (Ref "x")))
-  putStr $ compile $ doubleexpr :@ fexpr
+
+  template <- Data.Text.IO.readFile "template.py"
+  putStr $ unpack $ compileWithTemplate (doubleexpr :@ fexpr) template

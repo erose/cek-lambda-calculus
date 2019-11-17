@@ -88,7 +88,7 @@ data Kont =
 -- Advances the state machine until it hits a final state.
 terminal :: (Σ -> Σ) -> (Σ -> Bool) -> Σ -> Σ
 terminal step isFinal current =
-  if (isFinal current)
+  if isFinal current
     then current
   else
     terminal step isFinal (step current)
