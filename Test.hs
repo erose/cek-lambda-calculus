@@ -72,6 +72,29 @@ testReduction = do
   let reversal = (s:@(k:@(s:@i))):@k
   assertEqual (r:@q) $ Main.reduceWithEnv ((reversal:@q):@r) envWhereQAndRAreNeutral
 
+testChurchNumeralReduction :: IO ()
+testChurchNumeralReduction = do
+  let zero = Lam ("f" :=> Lam ("x" :=> (Ref "x")))
+  let one = Lam ("f" :=> Lam ("x" :=> ((Ref "f") :@ (Ref "x"))))
+  let two = Lam ("f" :=> Lam ("x" :=> ((Ref "f") :@ ((Ref "f") :@ (Ref "x")))))
+  let three = Lam ("f" :=> Lam ("x" :=> ((Ref "f") :@ ((Ref "f") :@ ((Ref "f") :@ (Ref "x"))))))
+  let plus = Lam ("m" :=> Lam ("n" :=> Lam ("f" :=> Lam ("x" :=> ( ((Ref "m") :@ (Ref "f")) :@ (((Ref "n") :@ (Ref "f")) :@ (Ref "x")) )))))
+
+  -- 0 + 0 == 0
+  assertEqual zero $ Main.reduce ((plus :@ zero) :@ zero)
+
+  -- 0 + 1 == 1
+  assertEqual one $ Main.reduce ((plus :@ zero) :@ one)
+
+  -- 1 + 1 == 2
+  assertEqual two $ Main.reduce ((plus :@ one) :@ one)
+
+  -- 1 + 2 == 3
+  assertEqual three $ Main.reduce ((plus :@ one) :@ two)
+
+  -- 2 + 1 == 3
+  assertEqual three $ Main.reduce ((plus :@ two) :@ one)
+
 -- Commented out for now as these functions have not proved to be stable.
 -- testSerializingExpressionsToPythonFunctions :: IO ()
 -- testSerializingExpressionsToPythonFunctions = do
@@ -98,4 +121,5 @@ main :: IO ()
 main = do
   testEvaluation
   testReduction
+  testChurchNumeralReduction
   -- testSerializingExpressionsToPythonFunctions

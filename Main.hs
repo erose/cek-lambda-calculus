@@ -1,7 +1,7 @@
 module Main where
 import qualified Data.Map.Strict as Map
 import ExprTypes
-import Debug.Trace -- TODO
+import Debug.Trace
 
 -- NOTES
 -- interpretation using closures
@@ -25,6 +25,8 @@ import Debug.Trace -- TODO
 --     into the control at the end, you don't get something that requires more computation?
 --   - How do you derive the CEK machine steps?
 --      - EXERCISE: Derive them from Christiansen's eval function.
+--   - Something about making a clear distinction between expressions and values. This is one of the
+--     things that tripped me up initially, not having before taken a class on the lambda calculus.
 --
 -- IDEAS:
 --   - Let's create a gadget (function), for each top-level expression, which tells you what to do when
@@ -53,9 +55,15 @@ data D =
   | Neu Neutral
   deriving (Show, Eq)
 
--- TODO: Explain.
+-- Neutral values are used when evaluating under a lambda that hasn't been applied yet. They
+-- represent terms that don't have values yet. For example, we might want to reduce the body of a
+-- lambda with a single argument x. We would do this by evaluating the body in an environment where
+-- x is bound to a NeutralVar.
 data Neutral =
   NeutralVar Var
+
+  -- Neutral terms accumulate their arguments on the right, because they will later represent lambda
+  -- expressions.
   | Neutral ::@ D
   deriving (Show, Eq)
 
@@ -67,8 +75,6 @@ data Kont =
   Mt -- the empty continuation
   | Ar Expr Env Kont -- "Evaluate this argument when I am done evaluating the function."
   | Fn Lambda Env Kont -- "Apply this function to the argument I am currently evaluating, when I finish evaluating it."
-
-  -- TODO: Should the new ones have Env as well?
 
   -- "Apply this neutral value to the argument I am currently evaluating, when I finish evaluating
   -- it. It will be the value of Expr."
@@ -89,7 +95,7 @@ terminal step isFinal current =
 
 -- Advances the machine forward by one step.
 step :: Σ -> Σ
-step state@(f :@ e, ρ, (N neutralValue parent κ')) -- This expression is neutral.
+step state@(_ :@ _, ρ, (N neutralValue parent κ')) -- This expression is neutral.
   = --trace ("Case is f :@ e with continuation N\n" ++ (stateToString state) ++ "\n")
   nextState where
     nextState = case κ' of
@@ -104,7 +110,7 @@ step state@(f :@ e, ρ, (N neutralValue parent κ')) -- This expression is neutr
         (e', ρ'', κ'') where
           ρ'' = Map.insert x (Neu neutralValue) ρ'
 
-      -- TODO: Explain what goes on.
+      -- Applying a neutral value to the neutral value contained in the continuation.
       NFn n parent κ' ->
         (parent, ρ, N (n ::@ (Neu neutralValue)) parent κ')
 
@@ -123,10 +129,11 @@ step state@(Lam lam, ρ, Fn (x :=> e) ρ' κ)
   (e, ρ'', κ) where
     ρ'' = Map.insert x (Closure lam ρ) ρ'
 
--- TODO: Describe what goes on.
-step state@(Lam lam, ρ, NFn neutralValue parent κ)
+-- Applying a neutral value to a lambda. No evaluation happens, instead we glue it on and go
+-- upwards.
+step state@(Lam lam, ρ, NFn n parent κ)
   = --trace ("Case is Lam lam on NFn\n" ++ (stateToString state) ++ "\n")
-  (parent, ρ, N (neutralValue ::@ (Closure lam ρ)) parent κ)
+  (parent, ρ, N (n ::@ (Closure lam ρ)) parent κ)
 
 step state@(Ref v, ρ, κ) -- Evaluating a reference? Look it up in the environment.
   = case (ρ !* v) of
@@ -134,73 +141,68 @@ step state@(Ref v, ρ, κ) -- Evaluating a reference? Look it up in the environm
         --trace ("Case is Ref v (Lookup was Closure)\n" ++ (stateToString state) ++ "\n")
         (Lam lam, ρ', κ)
 
-      Neu neutralValue ->
-        continue κ where
+      Neu n ->
+        case κ of
 
-        continue :: Kont -> Σ
         -- Discovered that the left side of an application was a neutral value. Evaluate the right
         -- side, preparing to apply the value to it.
-        continue (Ar e ρ' κ') = --trace ("Case is Ref v (Lookup was Neutral, Kont was Ar)\n" ++ (stateToString state) ++ "\n")
-          (e, ρ', NFn neutralValue ((Ref v) :@ e) κ')
+        Ar e ρ' κ' -> --trace ("Case is Ref v (Lookup was Neutral, Kont was Ar)\n" ++ (stateToString state) ++ "\n")
+          (e, ρ', NFn n ((Ref v) :@ e) κ')
 
         -- Discovered that the right side of a function application was a neutral value. Perform the
         -- application, now with the argument bound to its value in the environment.
-        continue (Fn (x :=> e) ρ' κ') = --trace ("Case is Ref v (Lookup was Neutral, Kont was Fn)\n" ++ (stateToString state) ++ "\n")
+        Fn (x :=> e) ρ' κ' -> --trace ("Case is Ref v (Lookup was Neutral, Kont was Fn)\n" ++ (stateToString state) ++ "\n")
           (e, ρ'', κ') where
-            ρ'' = Map.insert x (Neu neutralValue) ρ'
+            ρ'' = Map.insert x (Neu n) ρ'
 
         -- Discovered that the right side of a neutral application was a neutral value. Glue the
         -- terms together, reporting to the parent its value.
-        continue (NFn n parent κ') = --trace ("Case is Ref v (Lookup was Neutral, Kont was NFn)\n" ++ (stateToString state) ++ "\n")
-          (parent, ρ, N (n ::@ (Neu neutralValue)) parent κ')
+        NFn n' parent κ' -> --trace ("Case is Ref v (Lookup was Neutral, Kont was NFn)\n" ++ (stateToString state) ++ "\n")
+          (parent, ρ, N (n' ::@ (Neu n)) parent κ')
 
         -- Discovered that this lookup was a neutral value, and we have no more work to do. Put on
         -- the continuation that asserts this is a normal value. (The state will be terminal.)
-        continue Mt = --trace ("Case is Ref v (Lookup was Neutral, Kont was Mt)\n" ++ (stateToString state) ++ "\n")
-          (nexpr, ρ, N neutralValue nexpr Mt) where
-            nexpr = neutralToExpr neutralValue
-
--- TODO
-stateToString :: Σ -> String
-stateToString (e, ρ, κ) = "State:\n" ++ (show e) ++ "\n" ++ (show ρ) ++ "\n" ++ (show κ) ++ "\n"
+        Mt -> --trace ("Case is Ref v (Lookup was Neutral, Kont was Mt)\n" ++ (stateToString state) ++ "\n")
+          (Ref v, ρ, N n (Ref v) Mt)
 
 -- Decides whether a state is a final state.
 isFinal :: Σ -> Bool
 isFinal (Lam _, _, Mt) = True -- An unapplied lambda. No work left to do.
-isFinal (e, _, (N value _ Mt)) = True -- The current subtree is neutral, with no work left to do, so we have no work left to do.
+isFinal (_, _, (N value _ Mt)) = True -- The current subtree is neutral, with no work left to do, so we have no work left to do.
 isFinal _ = False
 
 -- Evaluates an expression, resulting in a value.
 evaluate :: Expr -> D
-evaluate expr = evaluateWithEnv expr Map.empty
+evaluate e = evaluateWithEnv e Map.empty
 
 -- Evaluates an expression in the context of a certain environment, resulting in a value.
 evaluateWithEnv :: Expr -> Env -> D
-evaluateWithEnv expr env = let
-  initialState = (expr, env, Mt)
+evaluateWithEnv e ρ = let
+  initialState = (e, ρ, Mt)
   finalState = terminal step isFinal initialState
   
   in
 
   case finalState of
-    (Lam lam, env', Mt)
-      -> Closure lam env'
+    (Lam lam, ρ', Mt)
+      -> Closure lam ρ'
 
     (_, _, N neutralValue _ Mt)
-      -> Neu neutralValue
+      -> --trace ("Terminated in neutral value " ++ (show neutralValue) ++ " and ρ' " ++ (show ρ'))
+         (Neu neutralValue)
 
 reduce :: Expr -> Expr
-reduce expr = reduceWithEnv expr Map.empty -- We start with the empty environment.
+reduce e = reduceWithEnv e Map.empty -- We start with the empty environment.
 
 reduceWithEnv :: Expr -> Env -> Expr
-reduceWithEnv expr env =
-  case (evaluateWithEnv expr env) of
+reduceWithEnv e ρ =
+  case (evaluateWithEnv e ρ) of
     -- The result was a closure; we continue by reducing under the lambda.
-    Closure (lam@(x :=> body)) env' ->
-      Lam (x :=> (reduceWithEnv body env'')) where
+    Closure (lam@(x :=> body)) ρ' ->
+      Lam (x :=> (reduceWithEnv body ρ'')) where
         -- Reduce under the lambda by evaluating the body in an environment where the argument is
         -- bound to a neutral variable.
-        env'' = Map.insert x (Neu (NeutralVar x)) env'
+        ρ'' = Map.insert x (Neu (NeutralVar x)) ρ'
 
     Neu neutralValue ->
       neutralToExpr neutralValue
@@ -212,6 +214,10 @@ reduceWithEnv expr env =
 map !* key = case (Map.lookup key map) of
   Just value -> value
   Nothing -> error $ "Could not find key " ++ (show key) ++ " in " ++ (show map)
+
+-- For debugging.
+stateToString :: Σ -> String
+stateToString (e, ρ, κ) = "State:\n" ++ (show e) ++ "\n" ++ (show ρ) ++ "\n" ++ (show κ) ++ "\n"
 
 valueToExpr :: D -> Expr
 valueToExpr (Closure lam _) = Lam lam
