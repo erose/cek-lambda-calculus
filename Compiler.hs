@@ -86,7 +86,7 @@ toSwitchCase expr@(Ref v) = printf s (toPythonReference expr) v (toPythonReferen
 \      k = continuations.pop()\n\
 \      if k.tag == 'Ar':\n\
 \        environment = k.env.copy()\n\
-\        continuations.append(NFn(n, Application(%s, k.e)))\n\
+\        continuations.append( NFn(n, Application(%s, k.e)) )\n\
 \        expr = k.e\n\
 \        continue\n\
 \      if k.tag == 'Fn':\n\
@@ -137,7 +137,7 @@ toSwitchCase expr@(f :@ e) = printf s (toPythonReference expr) (toPythonReferenc
 \        k_prime = continuations.pop()\n\
 \        \n\
 \        if k_prime.tag == 'Ar':\n\
-\          continuations.append(NFn(k.neutral, Application(k.parent, k_prime.e)))\n\
+\          continuations.append( NFn(k.neutral, Application(k.parent, k_prime.e)) )\n\
 \          expr = k_prime.e\n\
 \          continue\n\
 \        if k_prime.tag == 'Fn':\n\
@@ -146,11 +146,11 @@ toSwitchCase expr@(f :@ e) = printf s (toPythonReference expr) (toPythonReferenc
 \          expr = k_prime.lam.e\n\
 \          continue\n\
 \        if k_prime.tag == 'NFn':\n\
-\          continuations.append(N(NeutralApplication(k.neutral, k_prime.neutral), k_prime.parent))\n\
+\          continuations.append( N(NeutralApplication(k.neutral, k_prime.neutral), k_prime.parent) )\n\
 \          expr = k_prime.parent\n\
 \          continue\n\
 \      else:\n\
-\        continuations.append(Ar(%s, environment.copy()))\n\
+\        continuations.append( Ar(%s, environment.copy()) )\n\
 \        expr = %s\n\
 \        continue\n\
 \\n"
@@ -179,7 +179,7 @@ toSwitchCase expr@(Lam lam) = printf s (toPythonReference expr)
 \      \n\
 \      k = continuations.pop()\n\
 \      if k.tag == 'Ar':\n\
-\        continuations.append(Fn(expr, environment.copy()))\n\
+\        continuations.append( Fn(expr, environment.copy()) )\n\
 \        environment = k.env.copy()\n\
 \        expr = k.e\n\
 \        continue\n\
