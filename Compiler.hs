@@ -76,32 +76,35 @@ toSwitchCase expr@(Ref v) = printf s (toPythonReference expr) v (toPythonReferen
 \      value = environment['%s']\n\
 \      if value.tag == 'Closure':\n\
 \        closure = value\n\
+\        \n\
 \        environment = closure.env.copy()\n\
 \        expr = closure.lam\n\
+\        # continuation is unchanged\n\
 \        continue\n\
 \      \n\
 \      if value.tag != 'Neutral': raise Exception('Error')\n\
 \      n = value\n\
 \      \n\
-\      k = continuations.pop()\n\
-\      if k.tag == 'Ar':\n\
-\        environment = k.env.copy()\n\
-\        continuations.append( NFn(n, Application(%s, k.e)) )\n\
-\        expr = k.e\n\
+\      if continuation.tag == 'Ar':\n\
+\        environment = continuation.env.copy()\n\
+\        expr = continuation.e\n\
+\        continuation = NFn(n, Application(%s, continuation.e, continuation.previous))\n\
 \        continue\n\
-\      if k.tag == 'Fn':\n\
-\        environment = k.env.copy()\n\
-\        environment[k.lam.x] = n\n\
-\        expr = k.lam.e\n\
+\      if continuation.tag == 'Fn':\n\
+\        environment = continuation.env.copy()\n\
+\        environment[continuation.lam.x] = n\n\
+\        expr = continuation.lam.e\n\
+\        continuation = continuation.previous\n\
 \        continue\n\
-\      if k.tag == 'NFn':\n\
-\        continuations.append( N(NeutralApplication(k.neutral, n), k.parent) )\n\
-\        expr = k.parent\n\
+\      if continuation.tag == 'NFn':\n\
+\        # environment is unchanged\n\
+\        expr = continuation.parent\n\
+\        continuation = N(NeutralApplication(continuation.neutral, n), continuation.parent, continuation.previous)\n\
 \        continue\n\
-\      if k.tag == 'Mt':\n\
-\        continuations.append( Mt() )\n\
-\        continuations.append( N(n, %s) )\n\
+\      if continuation.tag == 'Mt':\n\
+\        # environment is unchanged\n\
 \        expr = %s\n\
+\        continuation = N(n, %s, Mt())\n\
 \        continue\n"
 
 -- The relevant case of the step function for reference.
@@ -132,26 +135,29 @@ toSwitchCase expr@(f :@ e) = printf s (toPythonReference expr) (toPythonReferenc
 \    if expr == %s:\n\
 \      if is_final(): break\n\
 \      \n\
-\      if continuations[-1].tag == 'N':\n\
-\        k = continuations.pop()\n\
-\        k_prime = continuations.pop()\n\
+\      if continuation.tag == 'N':\n\
+\        previous_continuation = continuation.previous\n\
 \        \n\
-\        if k_prime.tag == 'Ar':\n\
-\          continuations.append( NFn(k.neutral, Application(k.parent, k_prime.e)) )\n\
-\          expr = k_prime.e\n\
+\        if previous_continuation.tag == 'Ar':\n\
+\          # environment is unchanged\n\
+\          expr = previous_continuation.e\n\
+\          continuation = NFn(k.neutral, Application(k.parent, previous_continuation.e), previous_continuation.previous)\n\
 \          continue\n\
-\        if k_prime.tag == 'Fn':\n\
-\          environment = k_prime.env.copy()\n\
-\          environment[k_prime.lam.x] = k.neutral\n\
-\          expr = k_prime.lam.e\n\
+\        if previous_continuation.tag == 'Fn':\n\
+\          environment = previous_continuation.env.copy()\n\
+\          environment[previous_continuation.lam.x] = k.neutral\n\
+\          expr = previous_continuation.lam.e\n\
+\          continuation = previous_continuation.previous\n\
 \          continue\n\
-\        if k_prime.tag == 'NFn':\n\
-\          continuations.append( N(NeutralApplication(k.neutral, k_prime.neutral), k_prime.parent) )\n\
-\          expr = k_prime.parent\n\
+\        if previous_continuation.tag == 'NFn':\n\
+\          # environment is unchanged\n\
+\          expr = previous_continuation.parent\n\
+\          continuation = N(NeutralApplication(k.neutral, previous_continuation.neutral), previous_continuation.parent, previous_continuation.previous)\n\
 \          continue\n\
 \      else:\n\
-\        continuations.append( Ar(%s, environment.copy()) )\n\
+\        # environment is unchanged\n\
 \        expr = %s\n\
+\        continuation = Ar(%s, environment.copy(), continuation)\n\
 \        continue\n\
 \\n"
 
@@ -177,22 +183,23 @@ toSwitchCase expr@(Lam lam) = printf s (toPythonReference expr)
 \    if expr == %s:\n\
 \      if is_final(): break\n\
 \      \n\
-\      k = continuations.pop()\n\
-\      if k.tag == 'Ar':\n\
-\        continuations.append( Fn(expr, environment.copy()) )\n\
-\        environment = k.env.copy()\n\
-\        expr = k.e\n\
+\      if continuation.tag == 'Ar':\n\
+\        environment = continuation.env.copy()\n\
+\        expr = continuation.e\n\
+\        continuation = Fn(expr, environment.copy(), continuation.previous)\n\
 \        continue\n\
-\      if k.tag == 'Fn':\n\
+\      if continuation.tag == 'Fn':\n\
 \        old_environment = environment.copy()\n\
-\        environment = k.env.copy()\n\
-\        environment[k.lam.x] = Closure(expr, old_environment)\n\
-\        expr = k.lam.e\n\
+\        environment = continuation.env.copy()\n\
+\        environment[continuation.lam.x] = Closure(expr, old_environment)\n\
+\        expr = continuation.lam.e\n\
+\        continuation = continuation.previous\n\
 \        continue\n\
-\      if k.tag == 'NFn':\n\
-\        neutral_app = NeutralApplication(k.neutral, Closure(expr, environment.copy()))\n\
-\        continuations.append( N(neutral_app, k.parent) )\n\
-\        expr = k.parent\n\
+\      if continuation.tag == 'NFn':\n\
+\        # environment is unchanged\n\
+\        neutral_app = NeutralApplication(continuation.neutral, Closure(expr, environment.copy()))\n\
+\        expr = continuation.parent\n\
+\        continuation = N(neutral_app, continuation.parent, continuation.previous)\n\
 \        continue\n\
 \\n"
 

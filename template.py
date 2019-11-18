@@ -78,6 +78,8 @@ class NeutralApplication(Neutral):
 
 class Continuation(ABC):
   tag: str
+  def __init__(self, previous: 'Continuation'): # Forward reference in MyPy.
+    self.previous = previous
 
   def __repr__(self):
     return self.tag
@@ -85,30 +87,35 @@ class Continuation(ABC):
 class Mt(Continuation):
   def __init__(self):
     self.tag = "Mt"
+    super().__init__(None) # Mt has no previous continuation.
 
 class Ar(Continuation):
-  def __init__(self, e: Expr, env: Env):
+  def __init__(self, e: Expr, env: Env, previous: Continuation):
     self.tag = "Ar"
     self.e = e
     self.env = env
+    super().__init__(previous)
 
 class Fn(Continuation):
-  def __init__(self, lam: Lambda, env: Env):
+  def __init__(self, lam: Lambda, env: Env, previous: Continuation):
     self.tag = "Fn"
     self.lam = lam
     self.env = env
+    super().__init__(previous)
 
 class NFn(Continuation):
-  def __init__(self, neutral: Neutral, expr: Expr):
+  def __init__(self, neutral: Neutral, expr: Expr, previous: Continuation):
     self.tag = "NFn"
     self.neutral = neutral
     self.parent = expr
+    super().__init__(previous)
 
 class N(Continuation):
-  def __init__(self, neutral: Neutral, expr: Expr):
+  def __init__(self, neutral: Neutral, expr: Expr, previous: Continuation):
     self.tag = "N"
     self.neutral = neutral
     self.parent = expr
+    super().__init__(previous)
 
 #####
 
@@ -121,8 +128,8 @@ class N(Continuation):
 def is_final():
   global expr
   return (
-    (expr.tag == "Lambda" and continuations[-1].tag == 'Mt') or
-    (len(continuations) >= 2 and continuations[-1].tag == 'N' and continuations[-2].tag == 'Mt')
+    (expr.tag == "Lambda" and continuation.tag == 'Mt') or
+    (continuation.tag == 'N' and continuation.previous and continuation.previous.tag == 'Mt')
   )
 
 # Haskell implementations for reference.
@@ -168,10 +175,10 @@ def neutral_to_expr(neutral: Neutral) -> Expr:
 #       -> --trace ("Terminated in neutral value " ++ (show neutralValue) ++ " and ρ' " ++ (show ρ'))
 #          (Neu neutralValue)
 def evaluate() -> D:
-  global expr, environment, continuations
+  global expr, environment, continuation
 
   while True:
-    # print(expr, environment, continuations) # For debugging.
+    # print(expr, environment, continuation) # For debugging.
 {{switchOnExpr}}
 
   # If we finished on a lambda expression.
@@ -179,9 +186,8 @@ def evaluate() -> D:
     return Closure(expr, environment.copy())
 
   # If we finished with a neutral value.
-  if continuations[-1].tag == 'N' and continuations[-2].tag == 'Mt':
-    k = continuations[-1]
-    return k.neutral
+  if continuation.tag == 'N' and continuation.previous and continuation.previous.tag == 'Mt':
+    return continuation.neutral
 
   raise Exception('Error')
 
@@ -204,7 +210,6 @@ def reduce() -> Expr:
   # print(value) # For debugging.
   if value.tag == 'Closure':
     closure = value
-    # environment = closure.env.copy()
     environment[closure.lam.x] = NeutralVar(closure.lam.x)
 
     expr = closure.lam.e
@@ -220,7 +225,7 @@ def reduce() -> Expr:
 # Declare global variables.
 expr = None
 environment = {} # of type Env
-continuations = [Mt()] # of type List[Continuation]
+continuation = Mt()
 
 # Define the expressions.
 {{exprDefinitions}}
@@ -234,5 +239,5 @@ if __name__ == "__main__":
   except Exception:
     # For debugging.
     print("environment:", environment)
-    print("continuations:", continuations)
+    print("continuation:", continuation)
     raise
