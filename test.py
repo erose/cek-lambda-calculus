@@ -20,8 +20,8 @@ class TestCompiler(unittest.TestCase):
 
   def test_one_plus_one(self):
     self.assertEqual(
-      "Lam f :=> (Lam x :=> ((Ref f) :@ ((Ref f) :@ (Ref x))))", # Two, in Church numerals.
-      run('(m.n.f.x.mf(nfx))(f.x.fx)(f.x.fx)') # (plus one one) in Church numerals.
+      run('(m.n.f.x.mf(nfx))(f.x.fx)(f.x.fx)'), # (plus one one) in Church numerals.
+      "Lam f :=> (Lam x :=> ((Ref f) :@ ((Ref f) :@ (Ref x))))" # Two, in Church numerals.
     )
 
 if __name__ == "__main__":
