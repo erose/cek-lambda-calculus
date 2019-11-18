@@ -9,31 +9,31 @@ class TestCompiler(unittest.TestCase):
   def test_id_is_id(self):
     self.assertEqual(
       run('x.x'),
-      "Lam x :=> (Ref x)"
+      "x.x"
     )
 
   def test_id_applied_to_id_is_id(self):
     self.assertEqual(
       run('(x.x)(x.x)'),
-      "Lam x :=> (Ref x)"
+      "x.x"
     )
 
   def test_one_plus_one(self):
     self.assertEqual(
       run('(m.n.f.x.mf(nfx))(f.x.fx)(f.x.fx)'), # (plus one one) in Church numerals.
-      "Lam f :=> (Lam x :=> ((Ref f) :@ ((Ref f) :@ (Ref x))))" # Two, in Church numerals.
+      "f.x.(f(fx))" # Two, in Church numerals.
     )
 
   def test_skk_equals_i(self):
     self.assertEqual(
       run('(x.y.z.xz(yz))(x.y.x)(x.y.x)'), # skk, where s and k are of the SKI combinators
-      "Lam z :=> (Ref z)" # i
+      "z.z" # i
     )
 
   def test_sksk_equals_k(self):
     self.assertEqual(
       run('(x.y.z.xz(yz))(x.y.x)(x.y.z.xz(yz))(x.y.x)'), # sksk, where s and k are of the SKI combinators
-      "Lam x :=> (Lam y :=> (Ref x))" # k
+      "x.y.x" # k
     )
 
 if __name__ == "__main__":

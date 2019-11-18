@@ -14,7 +14,7 @@ class Ref(Expr):
     self.var = var
 
   def __repr__(self):
-    return f'Ref {self.var}'
+    return f'{self.var}'
 
 class Lambda(Expr):
   def __init__(self, x: str, e: Expr):
@@ -23,7 +23,7 @@ class Lambda(Expr):
     self.e = e
 
   def __repr__(self):
-    return f'Lam {self.x} :=> ({self.e})'
+    return f'{self.x}.{self.e}'
 
 class Application(Expr):
   def __init__(self, f: Expr, e: Expr):
@@ -32,7 +32,7 @@ class Application(Expr):
     self.e = e
 
   def __repr__(self):
-    return f'({self.f}) :@ ({self.e})'
+    return f'({self.f}{self.e})'
 
 # A value.
 class D(ABC):
