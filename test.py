@@ -30,6 +30,12 @@ class TestCompiler(unittest.TestCase):
       "Lam z :=> (Ref z)" # i
     )
 
+  def test_sksk_equals_k(self):
+    self.assertEqual(
+      run('(x.y.z.xz(yz))(x.y.x)(x.y.z.xz(yz))(x.y.x)'), # sksk, where s and k are of the SKI combinators
+      "Lam x :=> (Lam y :=> (Ref x))" # k
+    )
+
 if __name__ == "__main__":
   # Run the Haskell unit tests.
   subprocess.check_call(["runhaskell", "tests/UnitTests.hs"])
