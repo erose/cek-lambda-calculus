@@ -88,7 +88,7 @@ data Kont =
 -- Advances the state machine until it hits a final state.
 terminal :: (Σ -> Σ) -> (Σ -> Bool) -> Σ -> Σ
 terminal step isFinal current =
-  if (isFinal current)
+  if isFinal current
     then current
   else
     terminal step isFinal (step current)
@@ -111,8 +111,8 @@ step state@(_ :@ _, ρ, (N neutralValue parent κ')) -- This expression is neutr
           ρ'' = Map.insert x (Neu neutralValue) ρ'
 
       -- Applying a neutral value to the neutral value contained in the continuation.
-      NFn n parent κ' ->
-        (parent, ρ, N (n ::@ (Neu neutralValue)) parent κ')
+      NFn n parent' κ'' ->
+        (parent', ρ, N (n ::@ (Neu neutralValue)) parent' κ'')
 
 step state@(f :@ e, ρ, κ) -- Evaluating a function application? First, evaluate the function.
   = --trace ("Case is f :@ e\n" ++ (stateToString state) ++ "\n")
@@ -199,13 +199,15 @@ reduceWithEnv e ρ =
   case (evaluateWithEnv e ρ) of
     -- The result was a closure; we continue by reducing under the lambda.
     Closure (lam@(x :=> body)) ρ' ->
+      -- (trace $ (show lam) ++ " " ++ (show ρ') ++ "\n")
       Lam (x :=> (reduceWithEnv body ρ'')) where
         -- Reduce under the lambda by evaluating the body in an environment where the argument is
         -- bound to a neutral variable.
         ρ'' = Map.insert x (Neu (NeutralVar x)) ρ'
 
     Neu neutralValue ->
-      neutralToExpr neutralValue
+      -- (trace $ (show neutralValue) ++ "\n")
+      (neutralToExpr neutralValue)
 
 -- Utility functions.
 
