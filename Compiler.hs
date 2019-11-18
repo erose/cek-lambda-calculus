@@ -75,7 +75,7 @@ toSwitchCase expr@(Ref v) = printf s (toPythonReference expr) v (toPythonReferen
 \      if value.tag == 'Closure':\n\
 \        closure = value\n\
 \        environment = closure.env.copy()\n\
-\        expr = closure.lam.whole()\n\
+\        expr = closure.lam\n\
 \        continue\n\
 \      \n\
 \      if value.tag != 'Neutral': raise Exception('Error')\n\
@@ -90,7 +90,7 @@ toSwitchCase expr@(Ref v) = printf s (toPythonReference expr) v (toPythonReferen
 \      if k.tag == 'Fn':\n\
 \        environment = k.env.copy()\n\
 \        environment[k.lam.x] = n\n\
-\        expr = k.e\n\
+\        expr = k.lam.e\n\
 \        continue\n\
 \      if k.tag == 'NFn':\n\
 \        continuations.append( N(NeutralApplication(k.neutral, n), k.parent) )\n\
@@ -153,7 +153,46 @@ toSwitchCase expr@(f :@ e) = printf s (toPythonReference expr) (toPythonReferenc
 \        continue\n\
 \\n"
 
--- TODO: Lam.
+-- The relevant case of the step function for reference.
+-- step state@(Lam lam, ρ, Ar e ρ' κ) -- Evaluated the function? Good, now go evaluate the argument term.
+--   = --trace ("Case is Lam lam on Ar\n" ++ (stateToString state) ++ "\n")
+--   (e, ρ', Fn lam ρ κ)
+
+-- -- Evaluated the argument too? Perform the application, now with the argument bound to its value in
+-- -- the environment.
+-- step state@(Lam lam, ρ, Fn (x :=> e) ρ' κ)
+--   = --trace ("Case is Lam lam on Fn\n" ++ (stateToString state) ++ "\n")
+--   (e, ρ'', κ) where
+--     ρ'' = Map.insert x (Closure lam ρ) ρ'
+
+-- -- Applying a neutral value to a lambda. No evaluation happens, instead we glue it on and go
+-- -- upwards.
+-- step state@(Lam lam, ρ, NFn n parent κ)
+--   = --trace ("Case is Lam lam on NFn\n" ++ (stateToString state) ++ "\n")
+--   (parent, ρ, N (n ::@ (Closure lam ρ)) parent κ)
+toSwitchCase expr@(Lam lam) = printf s (toPythonReference expr)
+  where s = "\
+\    if expr == %s:\n\
+\      if is_final(): break\n\
+\      \n\
+\      k = continuations.pop()\n\
+\      if k.tag == 'Ar':\n\
+\        continuations.append(Fn(expr, environment.copy()))\n\
+\        environment = k.env.copy()\n\
+\        expr = k.e\n\
+\        continue\n\
+\      if k.tag == 'Fn':\n\
+\        old_environment = environment.copy()\n\
+\        environment = k.env.copy()\n\
+\        environment[k.lam.x] = Closure(expr, old_environment)\n\
+\        expr = k.lam.e\n\
+\        continue\n\
+\      if k.tag == 'NFn':\n\
+\        neutral_app = NeutralApplication(k.neutral, Closure(expr, environment.copy()))\n\
+\        continuations.append( N(neutral_app, k.parent) )\n\
+\        expr = k.parent\n\
+\        continue\n\
+\\n"
 
 toPythonReference :: Expr -> String
 toPythonReference expr = unpack $
@@ -189,11 +228,15 @@ pythonIdentifierSafe s = unpack $
 -- Just for testing.
 main :: IO ()
 main = do
-  -- putStr $ compile $ (Lam ("x" :=> (Ref "x"))) :@ Lam ("y" :=> (Ref "y"))
-
+  let idexpr = Lam ("x" :=> (Ref "x"))
   let fexpr = Lam ("x" :=> Lam ("y" :=> Ref "x"))
   let doubleexpr = Lam ("x" :=> ((Ref "x") :@ (Ref "x")))
 
+  let s = Lam ("x" :=> Lam ("y" :=> Lam ("z" :=> (((Ref "x") :@ (Ref "z")) :@ ((Ref "y") :@ (Ref "z"))))))
+  let k = Lam ("x" :=> Lam ("y" :=> (Ref "x")))
+  let i = Lam ("x" :=> (Ref "x"))
+
   template <- Data.Text.IO.readFile "template.py"
-  putStr $ unpack $ compileWithTemplate (((Ref "q") :@ (Ref "r")) :@ (Ref "t")) template
+  putStr $ unpack $ compileWithTemplate ((s:@k):@k) template
+  -- putStr $ unpack $ compileWithTemplate (((Ref "q") :@ (Ref "r")) :@ (Ref "t")) template
   -- putStr $ unpack $ compileWithTemplate (doubleexpr :@ fexpr) template

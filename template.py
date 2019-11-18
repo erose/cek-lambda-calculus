@@ -13,7 +13,7 @@ class Ref(Expr):
     self.tag = "Ref"
     self.var = var
 
-  def __str__(self):
+  def __repr__(self):
     return f'Ref {self.var}'
 
 class Lambda(Expr):
@@ -22,8 +22,8 @@ class Lambda(Expr):
     self.x = x
     self.e = e
 
-  def __str__(self):
-    return f'Lam ({self.x} :=> ({self.e}))'
+  def __repr__(self):
+    return f'Lam {self.x} :=> ({self.e})'
 
 class Application(Expr):
   def __init__(self, f: Expr, e: Expr):
@@ -31,8 +31,8 @@ class Application(Expr):
     self.f = f
     self.e = e
 
-  def __str__(self):
-    return f'{self.f} :@ {self.e}'
+  def __repr__(self):
+    return f'({self.f}) :@ ({self.e})'
 
 # A value.
 class D(ABC):
@@ -46,6 +46,9 @@ class Closure(D):
     self.lam = lam
     self.env = env
 
+  def __repr__(self):
+    return f'Closure({self.lam}, {self.env})'
+
 class Neutral(D, ABC):
   neutral_type: str
 
@@ -58,6 +61,9 @@ class NeutralVar(Neutral):
     self.var = var
     super().__init__()
 
+  def __repr__(self):
+    return f'NeutralVar {self.var}'
+
 class NeutralApplication(Neutral):
   def __init__(self, left: Neutral, right: D):
     self.neutral_type = "NeutralApplication"
@@ -65,12 +71,15 @@ class NeutralApplication(Neutral):
     self.right = right
     super().__init__()
 
+  def __repr__(self):
+    return f'NeutralApplication ({self.left}) ({self.right})'
+
 #####
 
 class Continuation(ABC):
   tag: str
 
-  def __str__(self):
+  def __repr__(self):
     return self.tag
 
 class Mt(Continuation):
@@ -139,7 +148,7 @@ def neutral_to_expr(neutral: Neutral) -> Expr:
     return Ref(neutral.var)
 
   if neutral.neutral_type == "NeutralApplication":
-    return Application(neutral_to_expr(neutral.left), neutral_to_expr(neutral.right))
+    return Application(neutral_to_expr(neutral.left), value_to_expr(neutral.right))
 
   raise Exception('Error')
 
@@ -158,10 +167,11 @@ def neutral_to_expr(neutral: Neutral) -> Expr:
 #     (_, _, N neutralValue _ Mt)
 #       -> --trace ("Terminated in neutral value " ++ (show neutralValue) ++ " and ρ' " ++ (show ρ'))
 #          (Neu neutralValue)
-def evaluate(expr: Expr) -> D:
-  global environment, continuations
+def evaluate() -> D:
+  global expr, environment, continuations
 
   while True:
+    # print(expr, environment, continuations) # For debugging.
 {{switchOnExpr}}
 
   # If we finished on a lambda expression.
@@ -187,12 +197,18 @@ def evaluate(expr: Expr) -> D:
 
 #     Neu neutralValue ->
 #       neutralToExpr neutralValue
-def reduce(expr: Expr) -> Expr:
-  value = evaluate(expr)
+def reduce() -> Expr:
+  global expr
+
+  value = evaluate()
+  print(value) # For debugging.
   if value.tag == 'Closure':
     closure = value
-    environment[closure.x] = NeutralVar(closure.x)
-    return Lambda(closure.lam.x, reduce(closure.lam.e))
+    # environment = closure.env.copy()
+    environment[closure.lam.x] = NeutralVar(closure.lam.x)
+
+    expr = closure.lam.e
+    return Lambda(closure.lam.x, reduce())
 
   if value.tag == "Neutral":
     return neutral_to_expr(value)
@@ -214,7 +230,7 @@ continuations = [Mt()] # of type List[Continuation]
 if __name__ == "__main__":
   try:
     expr = {{rootExpr}}
-    print(reduce(expr))
+    print(reduce())
   except Exception:
     # For debugging.
     print("environment:", environment)
