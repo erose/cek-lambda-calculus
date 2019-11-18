@@ -24,6 +24,12 @@ class TestCompiler(unittest.TestCase):
       "Lam f :=> (Lam x :=> ((Ref f) :@ ((Ref f) :@ (Ref x))))" # Two, in Church numerals.
     )
 
+  def test_skk_equals_i(self):
+    self.assertEqual(
+      run('(x.y.z.xz(yz))(x.y.x)(x.y.x)'), # skk, where s and k are of the SKI combinators
+      "Lam z :=> (Ref z)" # i
+    )
+
 if __name__ == "__main__":
   # Run the Haskell unit tests.
   subprocess.check_call(["runhaskell", "tests/UnitTests.hs"])
