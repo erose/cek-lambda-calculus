@@ -4,10 +4,12 @@ module Compiler where
 -- TODO: printf may cause exceptions to be thrown at runtime. Can I do this safer?
 import Text.Printf
 import Data.Text (Text, replace, pack, unpack)
+import System.Environment (getArgs)
 import qualified Data.Text.IO
 import qualified Data.List
 
 import ExprTypes
+import Parser (parseExpr)
 
 -- We're not going to try to be more structured than this.
 type PythonCode = String
@@ -140,8 +142,8 @@ toSwitchCase expr@(f :@ e) = printf s (toPythonReference expr) (toPythonReferenc
 \          continue\n\
 \        if k_prime.tag == 'Fn':\n\
 \          environment = k_prime.env.copy()\n\
-\          environment[k_prime.x] = neutral\n\
-\          expr = k_prime.e\n\
+\          environment[k_prime.lam.x] = k.neutral\n\
+\          expr = k_prime.lam.e\n\
 \          continue\n\
 \        if k_prime.tag == 'NFn':\n\
 \          continuations.append(N(NeutralApplication(k.neutral, k_prime.neutral), k_prime.parent))\n\
@@ -228,15 +230,21 @@ pythonIdentifierSafe s = unpack $
 -- Just for testing.
 main :: IO ()
 main = do
-  let idexpr = Lam ("x" :=> (Ref "x"))
-  let fexpr = Lam ("x" :=> Lam ("y" :=> Ref "x"))
-  let doubleexpr = Lam ("x" :=> ((Ref "x") :@ (Ref "x")))
+  -- let idexpr = Lam ("x" :=> (Ref "x"))
+  -- let fexpr = Lam ("x" :=> Lam ("y" :=> Ref "x"))
+  -- let doubleexpr = Lam ("x" :=> ((Ref "x") :@ (Ref "x")))
 
+  -- Some bindings that are available to use.
   let s = Lam ("x" :=> Lam ("y" :=> Lam ("z" :=> (((Ref "x") :@ (Ref "z")) :@ ((Ref "y") :@ (Ref "z"))))))
   let k = Lam ("x" :=> Lam ("y" :=> (Ref "x")))
   let i = Lam ("x" :=> (Ref "x"))
 
-  template <- Data.Text.IO.readFile "template.py"
-  putStr $ unpack $ compileWithTemplate ((s:@k):@k) template
-  -- putStr $ unpack $ compileWithTemplate (((Ref "q") :@ (Ref "r")) :@ (Ref "t")) template
-  -- putStr $ unpack $ compileWithTemplate (doubleexpr :@ fexpr) template
+  args <- getArgs
+  let input = args !! 0
+  case (parseExpr input) of
+    Left error -> do
+      putStrLn (show error)
+
+    Right expr -> do
+      template <- Data.Text.IO.readFile "template.py"
+      putStr $ unpack $ compileWithTemplate expr template

@@ -1,4 +1,4 @@
-module Test where
+module UnitTests where
 import qualified Data.Map.Strict as Map
 
 import ExprTypes
