@@ -199,14 +199,14 @@ reduceWithEnv e ρ =
   case (evaluateWithEnv e ρ) of
     -- The result was a closure; we continue by reducing under the lambda.
     Closure (lam@(x :=> body)) ρ' ->
-      (trace $ (show lam) ++ " " ++ (show ρ') ++ "\n")
+      -- (trace $ (show lam) ++ " " ++ (show ρ') ++ "\n")
       Lam (x :=> (reduceWithEnv body ρ'')) where
         -- Reduce under the lambda by evaluating the body in an environment where the argument is
         -- bound to a neutral variable.
         ρ'' = Map.insert x (Neu (NeutralVar x)) ρ'
 
     Neu neutralValue ->
-      (trace $ (show neutralValue) ++ "\n")
+      -- (trace $ (show neutralValue) ++ "\n")
       (neutralToExpr neutralValue)
 
 -- Utility functions.

@@ -201,7 +201,7 @@ def reduce() -> Expr:
   global expr
 
   value = evaluate()
-  print(value) # For debugging.
+  # print(value) # For debugging.
   if value.tag == 'Closure':
     closure = value
     # environment = closure.env.copy()
