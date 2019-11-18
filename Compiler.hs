@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Compiler where
 
--- TODO: printf may cause exceptions to be thrown at runtime. Can I do this safer?
 import Text.Printf
 import Data.Text (Text, replace, pack, unpack)
 import System.Environment (getArgs)
@@ -68,7 +67,7 @@ toPythonValue (Ref v) = "Ref(" ++ (show v) ++ ")"
 --         Mt -> --trace ("Case is Ref v (Lookup was Neutral, Kont was Mt)\n" ++ (stateToString state) ++ "\n")
 --           (Ref v, ρ, N n (Ref v) Mt)
 toSwitchCase :: Expr -> PythonCode
-toSwitchCase expr@(Ref v) = printf s (toPythonReference expr) v (toPythonReference expr) (toPythonReference expr) (toPythonReference expr)
+toSwitchCase expr@(Ref v) = printf s (toPythonReference expr) v
   where s = "\
 \    if expr == %s:\n\
 \      expr = cast(Ref, expr)\n\
@@ -91,7 +90,7 @@ toSwitchCase expr@(Ref v) = printf s (toPythonReference expr) v (toPythonReferen
 \        \n\
 \        environment = continuation.env.copy()\n\
 \        expr = continuation.e\n\
-\        continuation = NFn(n, Application(%s, continuation.e), continuation.previous)\n\
+\        continuation = NFn(n, Application(expr, continuation.e), continuation.previous)\n\
 \        continue\n\
 \      if continuation.tag == 'Fn':\n\
 \        continuation = cast(Fn, continuation)\n\
@@ -110,8 +109,8 @@ toSwitchCase expr@(Ref v) = printf s (toPythonReference expr) v (toPythonReferen
 \        continue\n\
 \      if continuation.tag == 'Mt':\n\
 \        # environment is unchanged\n\
-\        expr = %s\n\
-\        continuation = N(n, %s, Mt())\n\
+\        # expr is unchanged\n\
+\        continuation = N(n, expr, Mt())\n\
 \        continue\n"
 
 -- The relevant case of the step function for reference.
@@ -137,7 +136,7 @@ toSwitchCase expr@(Ref v) = printf s (toPythonReference expr) v (toPythonReferen
 -- step state@(f :@ e, ρ, κ) -- Evaluating a function application? First, evaluate the function.
 --   = --trace ("Case is f :@ e\n" ++ (stateToString state) ++ "\n")
 --   (f, ρ, Ar e ρ κ)
-toSwitchCase expr@(f :@ e) = printf s (toPythonReference expr) (toPythonReference e) (toPythonReference f)
+toSwitchCase expr@(f :@ e) = printf s (toPythonReference expr)
   where s = "\
 \    if expr == %s:\n\
 \      expr = cast(Application, expr)\n\
@@ -171,8 +170,8 @@ toSwitchCase expr@(f :@ e) = printf s (toPythonReference expr) (toPythonReferenc
 \          continue\n\
 \      else:\n\
 \        # environment is unchanged\n\
-\        expr = %s\n\
-\        continuation = Ar(%s, environment.copy(), continuation)\n\
+\        continuation = Ar(expr.e, environment.copy(), continuation)\n\
+\        expr = expr.f\n\
 \        continue\n\
 \\n"
 
