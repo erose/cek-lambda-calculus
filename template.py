@@ -142,20 +142,26 @@ def is_final():
 # neutralToExpr (a ::@ b) = (neutralToExpr a) :@ (valueToExpr b)
 def value_to_expr(value: D) -> Expr:
   if value.tag == 'Closure':
-    closure = value
+    closure = cast(Closure, value)
     return closure.lam
 
   if value.tag == 'Neutral':
+    value = cast(Neutral, value)
     return neutral_to_expr(value)
 
   raise Exception('Error')
 
 def neutral_to_expr(neutral: Neutral) -> Expr:
   if neutral.neutral_type == "NeutralVar":
+    neutral = cast(NeutralVar, neutral)
     return Ref(neutral.var)
 
   if neutral.neutral_type == "NeutralApplication":
-    return Application(neutral_to_expr(neutral.left), value_to_expr(neutral.right))
+    neutral = cast(NeutralApplication, neutral)
+    return Application(
+      neutral_to_expr(neutral.left),
+      value_to_expr(neutral.right)
+    )
 
   raise Exception('Error')
 
@@ -183,11 +189,12 @@ def evaluate() -> D:
 
   # If we finished on a lambda expression.
   if expr.tag == "Lambda":
-    return Closure(expr, environment.copy())
+    lam = cast(Lambda, expr)
+    return Closure(lam, environment.copy())
 
   # If we finished with a neutral value.
   if continuation.tag == 'N' and continuation.previous and continuation.previous.tag == 'Mt':
-    return continuation.neutral
+    return cast(N, continuation).neutral
 
   raise Exception('Error')
 
@@ -209,14 +216,14 @@ def reduce() -> Expr:
   value = evaluate()
   # print(value) # For debugging.
   if value.tag == 'Closure':
-    closure = value
+    closure = cast(Closure, value)
     environment[closure.lam.x] = NeutralVar(closure.lam.x)
 
     expr = closure.lam.e
     return Lambda(closure.lam.x, reduce())
 
   if value.tag == "Neutral":
-    return neutral_to_expr(value)
+    return neutral_to_expr(cast(Neutral, value))
 
   raise Exception('Error')
 
@@ -224,8 +231,10 @@ def reduce() -> Expr:
 
 # Declare global variables.
 expr = None
-environment = {} # of type Env
-continuation = Mt()
+expr = cast(Optional[Expr], expr)
+environment = {} # type: ignore
+environment = cast(Env, environment)
+continuation = cast(Continuation, Mt())
 
 # Define the expressions.
 {{exprDefinitions}}
