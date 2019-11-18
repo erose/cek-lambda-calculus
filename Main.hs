@@ -111,8 +111,8 @@ step state@(_ :@ _, ρ, (N neutralValue parent κ')) -- This expression is neutr
           ρ'' = Map.insert x (Neu neutralValue) ρ'
 
       -- Applying a neutral value to the neutral value contained in the continuation.
-      NFn n parent κ' ->
-        (parent, ρ, N (n ::@ (Neu neutralValue)) parent κ')
+      NFn n parent' κ'' ->
+        (parent', ρ, N (n ::@ (Neu neutralValue)) parent' κ'')
 
 step state@(f :@ e, ρ, κ) -- Evaluating a function application? First, evaluate the function.
   = --trace ("Case is f :@ e\n" ++ (stateToString state) ++ "\n")

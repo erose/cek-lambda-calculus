@@ -1,56 +1,86 @@
 from abc import ABC
 from typing import *
 
-# An Expr is just a reference to a function.
-class Expr:
-  def __init__(self, function):
-    self.function = function
+class Expr(ABC):
+  tag: str
+  def __eq__(self, other):
+    return str(self) == str(other)
 
 #####
 
-# A Lambda is an Expr, but with a reference to the argument and the body subexpression.
-class Lambda(Expr):
-  def __init__(self, var: str, body: Expr, *args):
+class Ref(Expr):
+  def __init__(self, var: str):
+    self.tag = "Ref"
     self.var = var
-    self.body = body
-    super().__init__(*args)
+
+  def __str__(self):
+    return f'Ref {self.var}'
+
+class Lambda(Expr):
+  def __init__(self, x: str, e: Expr):
+    self.tag = "Lambda"
+    self.x = x
+    self.e = e
+
+  def __str__(self):
+    return f'Lam ({self.x} :=> ({self.e}))'
+
+class Application(Expr):
+  def __init__(self, f: Expr, e: Expr):
+    self.tag = "Application"
+    self.f = f
+    self.e = e
+
+  def __str__(self):
+    return f'{self.f} :@ {self.e}'
 
 # A value.
 class D(ABC):
-  pass
+  tag: str
 
 Env = Dict[str, D]
 
 class Closure(D):
   def __init__(self, lam: Lambda, env: Env):
+    self.tag = "Closure"
     self.lam = lam
     self.env = env
 
-class Neutral(ABC):
-  pass
+class Neutral(D, ABC):
+  neutral_type: str
+
+  def __init__(self):
+    self.tag = "Neutral"
 
 class NeutralVar(Neutral):
   def __init__(self, var: str):
+    self.neutral_type = "NeutralVar"
     self.var = var
+    super().__init__()
 
 class NeutralApplication(Neutral):
   def __init__(self, left: Neutral, right: D):
+    self.neutral_type = "NeutralApplication"
     self.left = left
     self.right = right
+    super().__init__()
 
 #####
 
 class Continuation(ABC):
-  pass
+  tag: str
+
+  def __str__(self):
+    return self.tag
 
 class Mt(Continuation):
   def __init__(self):
     self.tag = "Mt"
 
 class Ar(Continuation):
-  def __init__(self, expr: Expr, env: Env):
+  def __init__(self, e: Expr, env: Env):
     self.tag = "Ar"
-    self.expr = expr
+    self.e = e
     self.env = env
 
 class Fn(Continuation):
@@ -73,18 +103,118 @@ class N(Continuation):
 
 #####
 
-# Declare global variables.
-  
-environment: Env = {}
-continuations: List[Continuation] = []
+# Check when we should stop computing, based on our state.
+# 
+# Haskell implementation, for reference.
+# isFinal (Lam _, _, Mt) = True -- An unapplied lambda. No work left to do.
+# isFinal (_, _, (N value _ Mt)) = True -- The current subtree is neutral, with no work left to do, so we have no work left to do.
+# isFinal _ = False
+def is_final():
+  global expr
+  return (
+    (expr.tag == "Lambda" and continuations[-1].tag == 'Mt') or
+    (len(continuations) >= 2 and continuations[-1].tag == 'N' and continuations[-2].tag == 'Mt')
+  )
 
-{{exprs}}
+# Haskell implementations for reference.
+# valueToExpr :: D -> Expr
+# valueToExpr (Closure lam _) = Lam lam
+# valueToExpr (Neu value) = neutralToExpr value
+
+# neutralToExpr :: Neutral -> Expr
+# neutralToExpr (NeutralVar v) = Ref v
+# neutralToExpr (a ::@ b) = (neutralToExpr a) :@ (valueToExpr b)
+def value_to_expr(value: D) -> Expr:
+  if value.tag == 'Closure':
+    closure = value
+    return closure.lam
+
+  if value.tag == 'Neutral':
+    return neutral_to_expr(value)
+
+  raise Exception('Error')
+
+def neutral_to_expr(neutral: Neutral) -> Expr:
+  if neutral.neutral_type == "NeutralVar":
+    return Ref(neutral.var)
+
+  if neutral.neutral_type == "NeutralApplication":
+    return Application(neutral_to_expr(neutral.left), neutral_to_expr(neutral.right))
+
+  raise Exception('Error')
+
+# Haskell implementation, for reference.
+# evaluateWithEnv :: Expr -> Env -> D
+# evaluateWithEnv e ρ = let
+#   initialState = (e, ρ, Mt)
+#   finalState = terminal step isFinal initialState
+  
+#   in
+
+#   case finalState of
+#     (Lam lam, ρ', Mt)
+#       -> Closure lam ρ'
+
+#     (_, _, N neutralValue _ Mt)
+#       -> --trace ("Terminated in neutral value " ++ (show neutralValue) ++ " and ρ' " ++ (show ρ'))
+#          (Neu neutralValue)
+def evaluate(expr: Expr) -> D:
+  global environment, continuations
+
+  while True:
+{{switchOnExpr}}
+
+  # If we finished on a lambda expression.
+  if expr.tag == "Lambda":
+    return Closure(expr, environment.copy())
+
+  # If we finished with a neutral value.
+  if continuations[-1].tag == 'N' and continuations[-2].tag == 'Mt':
+    k = continuations[-1]
+    return k.neutral
+
+  raise Exception('Error')
+
+# Haskell implementation, for reference.
+# reduceWithEnv e ρ =
+#   case (evaluateWithEnv e ρ) of
+#     -- The result was a closure; we continue by reducing under the lambda.
+#     Closure (lam@(x :=> body)) ρ' ->
+#       Lam (x :=> (reduceWithEnv body ρ'')) where
+#         -- Reduce under the lambda by evaluating the body in an environment where the argument is
+#         -- bound to a neutral variable.
+#         ρ'' = Map.insert x (Neu (NeutralVar x)) ρ'
+
+#     Neu neutralValue ->
+#       neutralToExpr neutralValue
+def reduce(expr: Expr) -> Expr:
+  value = evaluate(expr)
+  if value.tag == 'Closure':
+    closure = value
+    environment[closure.x] = NeutralVar(closure.x)
+    return Lambda(closure.lam.x, reduce(closure.lam.e))
+
+  if value.tag == "Neutral":
+    return neutral_to_expr(value)
+
+  raise Exception('Error')
+
+#####
+
+# Declare global variables.
+expr = None
+environment = {} # of type Env
+continuations = [Mt()] # of type List[Continuation]
+
+# Define the expressions.
+{{exprDefinitions}}
+
 
 # This is our entry point.
 if __name__ == "__main__":
   try:
-    term = {{rootExprReference}}
-    print(term(), environment)
+    expr = {{rootExpr}}
+    print(reduce(expr))
   except Exception:
     # For debugging.
     print("environment:", environment)
