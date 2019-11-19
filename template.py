@@ -78,11 +78,13 @@ class NeutralApplication(Neutral):
 
 class Continuation(ABC):
   tag: str
-  def __init__(self, previous: 'Continuation'): # Forward reference in MyPy.
+  def __init__(self, previous: 'Continuation'): # Forward reference in mypy.
     self.previous = previous
 
   def __repr__(self):
-    return self.tag
+    if self.previous is None:
+      return f'{self.tag}'
+    return f'{self.tag} ({self.previous})'
 
 class Mt(Continuation):
   def __init__(self):
@@ -128,9 +130,16 @@ class N(Continuation):
 def is_final():
   global expr
   return (
-    (expr.tag == "Lambda" and continuation.tag == 'Mt') or
-    (continuation.tag == 'N' and continuation.previous and continuation.previous.tag == 'Mt')
+    (expr.tag == "Lambda" and kont.tag == 'Mt') or
+    (kont.tag == 'N' and kont.previous and kont.previous.tag == 'Mt')
   )
+
+# Utility method.
+def set_new_state(e: Expr, env: Env, k: Continuation):
+  global expr, environment, kont
+  expr = e
+  environment = env
+  kont = k
 
 # Haskell implementations for reference.
 # valueToExpr :: D -> Expr
@@ -181,10 +190,10 @@ def neutral_to_expr(neutral: Neutral) -> Expr:
 #       -> --trace ("Terminated in neutral value " ++ (show neutralValue) ++ " and ρ' " ++ (show ρ'))
 #          (Neu neutralValue)
 def evaluate() -> D:
-  global expr, environment, continuation
+  global expr, environment, kont
 
   while True:
-    # print(expr, environment, continuation) # For debugging.
+    # print(expr, environment, kont) # For debugging.
 {{switchOnExpr}}
 
   # If we finished on a lambda expression.
@@ -193,8 +202,8 @@ def evaluate() -> D:
     return Closure(lam, environment.copy())
 
   # If we finished with a neutral value.
-  if continuation.tag == 'N' and continuation.previous and continuation.previous.tag == 'Mt':
-    return cast(N, continuation).neutral
+  if kont.tag == 'N' and kont.previous and kont.previous.tag == 'Mt':
+    return cast(N, kont).neutral
 
   raise Exception('Error')
 
@@ -234,7 +243,7 @@ expr = None
 expr = cast(Optional[Expr], expr)
 environment = {} # type: ignore
 environment = cast(Env, environment)
-continuation = cast(Continuation, Mt())
+kont = cast(Continuation, Mt())
 
 # Define the expressions.
 {{exprDefinitions}}
@@ -248,5 +257,5 @@ if __name__ == "__main__":
   except Exception:
     # For debugging.
     print("environment:", environment)
-    print("continuation:", continuation)
+    print("kont:", kont)
     raise
