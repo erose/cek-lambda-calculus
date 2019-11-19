@@ -24,17 +24,17 @@ class TestCompiler(unittest.TestCase):
       "f.x.(f(fx))" # Two, in Church numerals.
     )
 
-  # def test_skk_equals_i(self):
-  #   self.assertEqual(
-  #     run('(x.y.z.xz(yz))(x.y.x)(x.y.x)'), # skk, where s and k are of the SKI combinators
-  #     "z.z" # i
-  #   )
+  def test_skk_equals_i(self):
+    self.assertEqual(
+      run('(x.y.z.xz(yz))(x.y.x)(x.y.x)'), # skk, where s and k are of the SKI combinators
+      "z.z" # i
+    )
 
-  # def test_sksk_equals_k(self):
-  #   self.assertEqual(
-  #     run('(x.y.z.xz(yz))(x.y.x)(x.y.z.xz(yz))(x.y.x)'), # sksk, where s and k are of the SKI combinators
-  #     "x.y.x" # k
-  #   )
+  def test_sksk_equals_k(self):
+    self.assertEqual(
+      run('(x.y.z.xz(yz))(x.y.x)(x.y.z.xz(yz))(x.y.x)'), # sksk, where s and k are of the SKI combinators
+      "x.y.x" # k
+    )
 
 if __name__ == "__main__":
   # Run the Haskell unit tests.
