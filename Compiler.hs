@@ -196,8 +196,8 @@ toSwitchCase expr@(Lam lam) = printf s (toPythonReference expr)
 \        kont = cast(Fn, kont)\n\
 \        \n\
 \        new_environment = kont.env.copy()\n\
-\        new_environment[expr.x] = Closure(expr, environment.copy())\n\
-\        set_new_state(expr.e, new_environment, kont.previous)\n\
+\        new_environment[kont.lam.x] = Closure(expr, environment.copy())\n\
+\        set_new_state(kont.lam.e, new_environment, kont.previous)\n\
 \        continue\n\
 \      if kont.tag == 'NFn':\n\
 \        kont = cast(NFn, kont)\n\
