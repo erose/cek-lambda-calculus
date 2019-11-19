@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Compiler where
 
--- TODO: printf may cause exceptions to be thrown at runtime. Can I do this safer?
 import Text.Printf
 import Data.Text (Text, replace, pack, unpack)
 import System.Environment (getArgs)
@@ -68,40 +67,43 @@ toPythonValue (Ref v) = "Ref(" ++ (show v) ++ ")"
 --         Mt -> --trace ("Case is Ref v (Lookup was Neutral, Kont was Mt)\n" ++ (stateToString state) ++ "\n")
 --           (Ref v, ρ, N n (Ref v) Mt)
 toSwitchCase :: Expr -> PythonCode
-toSwitchCase expr@(Ref v) = printf s (toPythonReference expr) v (toPythonReference expr) (toPythonReference expr) (toPythonReference expr)
+toSwitchCase expr@(Ref v) = printf s (toPythonReference expr)
   where s = "\
 \    if expr == %s:\n\
+\      expr = cast(Ref, expr)\n\
 \      if is_final(): break\n\
 \      \n\
-\      value = environment['%s']\n\
+\      value = environment[expr.var]\n\
 \      if value.tag == 'Closure':\n\
-\        closure = value\n\
-\        environment = closure.env.copy()\n\
-\        expr = closure.lam\n\
+\        closure = cast(Closure, value)\n\
+\        \n\
+\        set_new_state(closure.lam, closure.env.copy(), kont)\n\
 \        continue\n\
 \      \n\
 \      if value.tag != 'Neutral': raise Exception('Error')\n\
-\      n = value\n\
+\      n = cast(Neutral, value)\n\
 \      \n\
-\      k = continuations.pop()\n\
-\      if k.tag == 'Ar':\n\
-\        environment = k.env.copy()\n\
-\        continuations.append( NFn(n, Application(%s, k.e)) )\n\
-\        expr = k.e\n\
+\      if kont.tag == 'Ar':\n\
+\        kont = cast(Ar, kont)\n\
+\        \n\
+\        new_kont = NFn(n, Application(expr, kont.e), kont.previous)\n\
+\        set_new_state(kont.e, kont.env.copy(), new_kont)\n\
 \        continue\n\
-\      if k.tag == 'Fn':\n\
-\        environment = k.env.copy()\n\
-\        environment[k.lam.x] = n\n\
-\        expr = k.lam.e\n\
+\      if kont.tag == 'Fn':\n\
+\        kont = cast(Fn, kont)\n\
+\        \n\
+\        new_environment = kont.env.copy()\n\
+\        new_environment[kont.lam.x] = n\n\
+\        set_new_state(kont.lam.e, new_environment, kont.previous)\n\
 \        continue\n\
-\      if k.tag == 'NFn':\n\
-\        continuations.append( N(NeutralApplication(k.neutral, n), k.parent) )\n\
-\        expr = k.parent\n\
+\      if kont.tag == 'NFn':\n\
+\        kont = cast(NFn, kont)\n\
+\        \n\
+\        new_kont = N(NeutralApplication(kont.neutral, n), kont.parent, kont.previous)\n\
+\        set_new_state(kont.parent, environment, new_kont)\n\
 \        continue\n\
-\      if k.tag == 'Mt':\n\
-\        continuations.append( Mt() )\n\
-\        continuations.append( N(n, %s) )\n\
-\        expr = %s\n\
+\      if kont.tag == 'Mt':\n\
+\        set_new_state(expr, environment, N(n, expr, Mt()))\n\
 \        continue\n"
 
 -- The relevant case of the step function for reference.
@@ -127,31 +129,38 @@ toSwitchCase expr@(Ref v) = printf s (toPythonReference expr) v (toPythonReferen
 -- step state@(f :@ e, ρ, κ) -- Evaluating a function application? First, evaluate the function.
 --   = --trace ("Case is f :@ e\n" ++ (stateToString state) ++ "\n")
 --   (f, ρ, Ar e ρ κ)
-toSwitchCase expr@(f :@ e) = printf s (toPythonReference expr) (toPythonReference e) (toPythonReference f)
+toSwitchCase expr@(f :@ e) = printf s (toPythonReference expr)
   where s = "\
 \    if expr == %s:\n\
+\      expr = cast(Application, expr)\n\
 \      if is_final(): break\n\
 \      \n\
-\      if continuations[-1].tag == 'N':\n\
-\        k = continuations.pop()\n\
-\        k_prime = continuations.pop()\n\
+\      if kont.tag == 'N':\n\
+\        kont = cast(N, kont)\n\
+\        previous_kont = kont.previous\n\
 \        \n\
-\        if k_prime.tag == 'Ar':\n\
-\          continuations.append( NFn(k.neutral, Application(k.parent, k_prime.e)) )\n\
-\          expr = k_prime.e\n\
+\        if previous_kont.tag == 'Ar':\n\
+\          previous_kont = cast(Ar, previous_kont)\n\
+\          \n\
+\          new_kont = NFn(kont.neutral, Application(kont.parent, previous_kont.e), previous_kont.previous)\n\
+\          set_new_state(previous_kont.e, previous_kont.env.copy(), new_kont)\n\
 \          continue\n\
-\        if k_prime.tag == 'Fn':\n\
-\          environment = k_prime.env.copy()\n\
-\          environment[k_prime.lam.x] = k.neutral\n\
-\          expr = k_prime.lam.e\n\
+\        if previous_kont.tag == 'Fn':\n\
+\          previous_kont = cast(Fn, previous_kont)\n\
+\          \n\
+\          new_environment = previous_kont.env.copy()\n\
+\          new_environment[previous_kont.lam.x] = kont.neutral\n\
+\          set_new_state(previous_kont.lam.e, new_environment, previous_kont.previous)\n\
 \          continue\n\
-\        if k_prime.tag == 'NFn':\n\
-\          continuations.append( N(NeutralApplication(k.neutral, k_prime.neutral), k_prime.parent) )\n\
-\          expr = k_prime.parent\n\
+\        if previous_kont.tag == 'NFn':\n\
+\          previous_kont = cast(NFn, previous_kont)\n\
+\          \n\
+\          new_kont = N(NeutralApplication(previous_kont.neutral, kont.neutral), previous_kont.parent, previous_kont.previous)\n\
+\          set_new_state(previous_kont.parent, environment, new_kont)\n\
 \          continue\n\
 \      else:\n\
-\        continuations.append( Ar(%s, environment.copy()) )\n\
-\        expr = %s\n\
+\        new_kont = Ar(expr.e, environment.copy(), kont)\n\
+\        set_new_state(expr.f, environment, new_kont)\n\
 \        continue\n\
 \\n"
 
@@ -175,24 +184,26 @@ toSwitchCase expr@(f :@ e) = printf s (toPythonReference expr) (toPythonReferenc
 toSwitchCase expr@(Lam lam) = printf s (toPythonReference expr)
   where s = "\
 \    if expr == %s:\n\
+\      expr = cast(Lambda, expr)\n\
 \      if is_final(): break\n\
 \      \n\
-\      k = continuations.pop()\n\
-\      if k.tag == 'Ar':\n\
-\        continuations.append( Fn(expr, environment.copy()) )\n\
-\        environment = k.env.copy()\n\
-\        expr = k.e\n\
+\      if kont.tag == 'Ar':\n\
+\        kont = cast(Ar, kont)\n\
+\        \n\
+\        set_new_state(kont.e, kont.env.copy(), Fn(expr, environment.copy(), kont.previous))\n\
 \        continue\n\
-\      if k.tag == 'Fn':\n\
-\        old_environment = environment.copy()\n\
-\        environment = k.env.copy()\n\
-\        environment[k.lam.x] = Closure(expr, old_environment)\n\
-\        expr = k.lam.e\n\
+\      if kont.tag == 'Fn':\n\
+\        kont = cast(Fn, kont)\n\
+\        \n\
+\        new_environment = kont.env.copy()\n\
+\        new_environment[kont.lam.x] = Closure(expr, environment.copy())\n\
+\        set_new_state(kont.lam.e, new_environment, kont.previous)\n\
 \        continue\n\
-\      if k.tag == 'NFn':\n\
-\        neutral_app = NeutralApplication(k.neutral, Closure(expr, environment.copy()))\n\
-\        continuations.append( N(neutral_app, k.parent) )\n\
-\        expr = k.parent\n\
+\      if kont.tag == 'NFn':\n\
+\        kont = cast(NFn, kont)\n\
+\        \n\
+\        neutral_app = NeutralApplication(kont.neutral, Closure(expr, environment.copy()))\n\
+\        set_new_state(kont.parent, environment, N(neutral_app, kont.parent, kont.previous))\n\
 \        continue\n\
 \\n"
 
